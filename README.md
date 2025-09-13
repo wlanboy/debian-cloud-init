@@ -15,11 +15,19 @@ wget https://cdimage.debian.org/cdimage/cloud/bookworm/latest/debian-12-generic-
 wget https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 ```
 
-## create cloud init
+## prepare cloud init file
+This python script asks for username, password, list all public ssh keys to select one.
+It uses this information to update the cloud-init.yml template.
+It needs mkpasswd (packaged with whois) to create the hash for the user password.
 ```bash
 sudo apt-get install whois # to get mkpasswd binary
-mkpasswd -m sha-512 # to generate hash for your user password
 
+python3 update-cloud-init.py
+```
+
+## create cloud init
+```bash
+mkpasswd -m sha-512 # to generate hash for your user password
 cp cloud-init.yml /isos # copy cloud-init.yaml with inserted values
 ```
 
