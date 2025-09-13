@@ -1,4 +1,11 @@
-# debian kvm cloud init
+# debian kvm virsh install with cloud init
+This repo describes how to auto install debain12 and debian13 with virsh-install and cloud-init.
+Which images you can use, and which images you should not use.
+How to add user passwords with hashes and how to create harddisk images from templates.
+
+## sources for images
+- https://cdimage.debian.org/cdimage/cloud/
+- https://cloud-images.ubuntu.com/noble/current/
 
 ## get debian image
 Do not use genericcloud images, they do not contain sata ahci drivers for cloud init.
@@ -7,10 +14,6 @@ cd /isos
 wget https://cdimage.debian.org/cdimage/cloud/bookworm/latest/debian-12-generic-amd64.qcow2
 wget https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2
 ```
-
-## sources for images
-- https://cdimage.debian.org/cdimage/cloud/
-- https://cloud-images.ubuntu.com/noble/current/
 
 ## create cloud init
 ```bash
