@@ -85,6 +85,17 @@ virt-install \
 --noautoconsole \
 ```
 
+## delete vms
+```bash
+virsh shutdown debian12
+virsh destroy debian12
+virsh undefine debian12
+
+virsh shutdown debian13
+virsh destroy debian13
+virsh undefine debian13
+```
+
 ## cloud init tools
 ### check cloud-init status
 ```bash
