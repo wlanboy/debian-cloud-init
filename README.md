@@ -78,6 +78,13 @@ virt-install \
   --import
 ```
 
+## if install works for your usecase add following parameter for background install
+```
+virt-install \
+...
+--noautoconsole \
+```
+
 ## cloud init tools
 ### check cloud-init status
 ```bash
