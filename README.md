@@ -38,7 +38,7 @@ virt-install --os-variant list
 virsh net-start host-bridge # check if host-bridge is running
 ```
 
-## Create base hard disk image and install debian with cloud init with debian 12
+## Create base hard disk image and install debian12 with cloud init
 ```bash
 # create disk image for vm
 qemu-img create -f qcow2 -o backing_file=/isos/debian-12-generic-amd64.qcow2,backing_fmt=qcow2 /isos/debian-12.qcow2 30G 
@@ -58,7 +58,7 @@ virt-install \
   --import
 ```
 
-## Create base hard disk image and install debian with cloud init with debian 13 (needs uefi)
+## Create base hard disk image and install debian13 with cloud init (needs uefi)
 ```bash
 # create disk image for vm
 qemu-img create -f qcow2 -o backing_file=/isos/debian-13-generic-amd64.qcow2,backing_fmt=qcow2 /isos/debian-13.qcow2 30G
