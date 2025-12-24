@@ -172,7 +172,7 @@ def main():
     ensure_isos_folder()
     ensure_base_image()
     ensure_overlay_image(vmname)
-    create_vm(vmname)
+    create_vm(vmname,username)
 
     success("Alle Schritte abgeschlossen.")
 

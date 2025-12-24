@@ -223,7 +223,7 @@ def ensure_overlay_image(vmname):
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname):
+def create_vm(vmname,username):
     # cloud-init.yml nach /isos kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = pathlib.Path("/isos/cloud-init.yml")
@@ -253,9 +253,64 @@ def create_vm(vmname):
         "--network network=default,model=virtio "
         "--cloud-init user-data=/isos/cloud-init.yml "
         "--boot uefi "
+        "--noautoconsole"
         "--import"
     )
 
     progress("Erstelle VM…")
     run_cmd(cmd)
     success(f"VM '{vmname}' wurde angelegt.")
+
+    # IP-Adresse ermitteln 
+    ip = get_vm_ip(vmname) 
+    # SSH-Befehl anzeigen 
+    print_ssh_command(username, ip)
+
+def get_vm_ip(vmname, user):
+    progress("Ermittle IP-Adresse der VM…")
+
+    # Bis zu 30 Sekunden warten
+    for _ in range(30):
+        # Versuch 1: direkte Abfrage
+        result = subprocess.run(
+            f"virsh domifaddr {vmname} --source agent",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if result.returncode == 0 and "ipv4" in result.stdout.lower():
+            for line in result.stdout.splitlines():
+                if "ipv4" in line.lower():
+                    ip = line.split()[3].split("/")[0]
+                    success(f"IP-Adresse gefunden: {ip}")
+                    return ip
+
+        # Versuch 2: DHCP-Leases
+        result = subprocess.run(
+            "virsh net-dhcp-leases default",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if vmname in line or "ipv4" in line.lower():
+                    parts = line.split()
+                    for p in parts:
+                        if p.count(".") == 3 and "/" in p:
+                            ip = p.split("/")[0]
+                            success(f"IP-Adresse gefunden: {ip}")
+                            return ip
+
+        time.sleep(1)
+
+    fail("Konnte die IP-Adresse der VM nicht ermitteln.")
+
+def print_ssh_command(username, ip):
+    print("\n=== SSH-Verbindung ===")
+    print(f"ssh {username}@{ip}")
+    print("======================\n")
