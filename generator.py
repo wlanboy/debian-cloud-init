@@ -105,8 +105,9 @@ def main():
         )
 
     # -------------------------------------------------------------------------
-    # EXTERNE DATEIEN PRÜFEN
+    # PROVISIONIERUNG LÄUFT IMMER (Session oder neu)
     # -------------------------------------------------------------------------
+
     ensure_file_exists(
         tools_file,
         "https://github.com/wlanboy/vagrantkind/raw/refs/heads/main/amd64-tools.sh",
@@ -123,9 +124,7 @@ def main():
         if line.strip()
     ]
 
-    # -------------------------------------------------------------------------
-    # CLOUD-INIT ERZEUGEN
-    # -------------------------------------------------------------------------
+    # Cloud-Init Template laden und anpassen
     try:
         cloud_config = yaml.safe_load(template_file.read_text()) or {}
     except Exception as e:
@@ -164,9 +163,6 @@ def main():
 
     success("cloud-init.yml erfolgreich erstellt.")
 
-    # -------------------------------------------------------------------------
-    # VM SETUP
-    # -------------------------------------------------------------------------
     print("\n=== VM-Setup ===")
 
     ensure_isos_folder()

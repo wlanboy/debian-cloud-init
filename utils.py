@@ -119,11 +119,13 @@ def save_session(data):
 # =============================================================================
 
 def delete_vm(vmname):
+    # Prüfen, ob VM existiert
     result = subprocess.run(
         f"virsh list --all | grep -w {vmname}",
         shell=True,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        text=True
     )
 
     if result.returncode != 0:
@@ -135,18 +137,20 @@ def delete_vm(vmname):
     if not ask_yes_no("Soll die bestehende VM gelöscht werden?"):
         fail("Abbruch.")
 
+    # VM stoppen
     progress("Stoppe VM…")
-    run_cmd(f"virsh destroy {vmname}")
+    subprocess.run(f"virsh destroy {vmname}", shell=True)
 
+    # VM undefinieren
     progress("Lösche VM…")
-    run_cmd(f"virsh undefine {vmname} --remove-all-storage")
+    run_cmd(f"virsh undefine {vmname} --remove-all-storage --nvram")
 
+    # Overlay löschen
     overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
     if overlay.exists():
         run_cmd(f"rm -f {overlay}")
 
     success(f"VM '{vmname}' wurde vollständig gelöscht.")
-
 
 # =============================================================================
 # /isos Ordner + Images
@@ -253,7 +257,7 @@ def create_vm(vmname,username):
         "--network network=default,model=virtio "
         "--cloud-init user-data=/isos/cloud-init.yml "
         "--boot uefi "
-        "--noautoconsole"
+        "--noautoconsole "
         "--import"
     )
 
@@ -266,12 +270,31 @@ def create_vm(vmname,username):
     # SSH-Befehl anzeigen 
     print_ssh_command(username, ip)
 
-def get_vm_ip(vmname, user):
+def get_vm_ip(vmname):
+    progress("Warte darauf, dass die VM startet…")
+
+    # Warten, bis die VM läuft
+    for _ in range(30):
+        state = subprocess.run(
+            f"virsh domstate {vmname}",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        ).stdout.strip()
+
+        if "running" in state.lower():
+            break
+
+        time.sleep(1)
+    else:
+        fail("VM ist nicht gestartet.")
+
     progress("Ermittle IP-Adresse der VM…")
 
-    # Bis zu 30 Sekunden warten
-    for _ in range(30):
-        # Versuch 1: direkte Abfrage
+    # Bis zu 60 Sekunden auf IP warten
+    for _ in range(60):
+        # Versuch 1: QEMU-Agent (beste Methode)
         result = subprocess.run(
             f"virsh domifaddr {vmname} --source agent",
             shell=True,
@@ -309,6 +332,7 @@ def get_vm_ip(vmname, user):
         time.sleep(1)
 
     fail("Konnte die IP-Adresse der VM nicht ermitteln.")
+
 
 def print_ssh_command(username, ip):
     print("\n=== SSH-Verbindung ===")
