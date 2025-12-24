@@ -16,9 +16,9 @@ from utils import (
     progress,
     success,
     fail,
-    load_session, 
-    save_session, 
-    delete_vm,    
+    load_session,
+    save_session,
+    delete_vm,
 )
 
 
@@ -30,127 +30,148 @@ def main():
     system_config_file = templates_dir / "system-config.txt"
     tools_file = templates_dir / "amd64-tools.sh"
 
-    # -------------------------------------------------------------------------
-    # Cloud-Init Template prüfen
-    # -------------------------------------------------------------------------
-    if not template_file.is_file():
-        fail(f"Template fehlt: {template_file}")
 
-    output_file = pathlib.Path("cloud-init.yml")
+    session = load_session()
 
-    vmname = input("Name der VM (z. B. debian13): ").strip()
-    if not vmname:
-        fail("VM-Name darf nicht leer sein.")
+    if session:
+        vmname = session["vmname"]
+        username = session["username"]
+        ssh_key_content = pathlib.Path(session["ssh_key"]).read_text().strip()
 
-    # -------------------------------------------------------------------------
-    # User / Passwort / SSH-Key
-    # -------------------------------------------------------------------------
-    username = input("Benutzername für die VM: ").strip()
-    password = getpass.getpass("Passwort (wird gehasht): ")
+        print(f"Session geladen: VM={vmname}, User={username}")
 
-    progress("Erstelle Passwort-Hash…")
-    try:
-        hashed_password = subprocess.run(
-            ['mkpasswd', '-m', 'sha-512', password],
-            capture_output=True,
-            text=True,
-            check=True
-        ).stdout.strip()
-    except Exception:
-        fail("mkpasswd fehlt. Installiere: sudo apt install whois")
+        delete_vm(vmname)
 
-    ssh_dir = pathlib.Path.home() / ".ssh"
-    pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
+    else:
 
-    if not pub_keys:
-        fail("Keine öffentlichen SSH-Keys (*.pub) im ~/.ssh gefunden.")
+        # -------------------------------------------------------------------------
+        # Cloud-Init Template prüfen
+        # -------------------------------------------------------------------------
+        if not template_file.is_file():
+            fail(f"Template fehlt: {template_file}")
 
-    print("\nVerfügbare SSH-Keys:")
-    for i, key in enumerate(pub_keys):
-        print(f"  [{i}] {key.name}")
+        output_file = pathlib.Path("cloud-init.yml")
 
-    while True:
+        vmname = input("Name der VM (z. B. debian13): ").strip()
+        if not vmname:
+            fail("VM-Name darf nicht leer sein.")
+
+        # -------------------------------------------------------------------------
+        # User / Passwort / SSH-Key
+        # -------------------------------------------------------------------------
+        username = input("Benutzername für die VM: ").strip()
+        password = getpass.getpass("Passwort (wird gehasht): ")
+
+        progress("Erstelle Passwort-Hash…")
         try:
-            sel = int(input("Key auswählen: "))
-            if 0 <= sel < len(pub_keys):
-                ssh_key_content = pub_keys[sel].read_text().strip()
-                break
+            hashed_password = subprocess.run(
+                ["mkpasswd", "-m", "sha-512", password],
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
         except Exception:
-            pass
-        print("Ungültige Auswahl.")
+            fail("mkpasswd fehlt. Installiere: sudo apt install whois")
 
-    # -------------------------------------------------------------------------
-    # Externe Dateien prüfen (Templates)
-    # -------------------------------------------------------------------------
-    ensure_file_exists(
-        tools_file,
-        "https://github.com/wlanboy/vagrantkind/raw/refs/heads/main/amd64-tools.sh"
-    )
-    ensure_file_exists(system_config_file)
-    ensure_file_exists(package_config_file)
+        ssh_dir = pathlib.Path.home() / ".ssh"
+        pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
 
-    tools_content = tools_file.read_text()
-    system_config_content = system_config_file.read_text()
+        if not pub_keys:
+            fail("Keine öffentlichen SSH-Keys (*.pub) im ~/.ssh gefunden.")
 
-    package_runcmd = [
-        line.strip()
-        for line in package_config_file.read_text().splitlines()
-        if line.strip()
-    ]
+        print("\nVerfügbare SSH-Keys:")
+        for i, key in enumerate(pub_keys):
+            print(f"  [{i}] {key.name}")
 
-    # -------------------------------------------------------------------------
-    # Cloud-Init Template laden und anpassen
-    # -------------------------------------------------------------------------
-    try:
-        cloud_config = yaml.safe_load(template_file.read_text()) or {}
-    except Exception as e:
-        fail(f"Fehler beim Laden des Templates: {e}")
+        while True:
+            try:
+                sel = int(input("Key auswählen: "))
+                if 0 <= sel < len(pub_keys):
+                    ssh_key_content = pub_keys[sel].read_text().strip()
+                    break
+            except Exception:
+                pass
+            print("Ungültige Auswahl.")
 
-    cloud_config['users'] = [{
-        'name': username,
-        'passwd': hashed_password,
-        'groups': ['sudo'],
-        'shell': '/bin/bash',
-        'sudo': ['ALL=(ALL) NOPASSWD:ALL'],
-        'ssh_authorized_keys': [ssh_key_content]
-    }]
-
-    cloud_config['runcmd'] = (
-        package_runcmd
-        + [
-            LiteralString(tools_content),
-            LiteralString(system_config_content)
-        ]
-    )
-
-    # -------------------------------------------------------------------------
-    # cloud-init.yml schreiben + validieren
-    # -------------------------------------------------------------------------
-    progress("Schreibe cloud-init.yml…")
-    try:
-        output_file.write_text(
-            yaml.dump(cloud_config, sort_keys=False, Dumper=yaml.SafeDumper)
+        # -------------------------------------------------------------------------
+        # Externe Dateien prüfen (Templates)
+        # -------------------------------------------------------------------------
+        ensure_file_exists(
+            tools_file,
+            "https://github.com/wlanboy/vagrantkind/raw/refs/heads/main/amd64-tools.sh",
         )
-    except Exception as e:
-        fail(f"Fehler beim Schreiben der cloud-init.yml: {e}")
+        ensure_file_exists(system_config_file)
+        ensure_file_exists(package_config_file)
 
-    progress("Validiere YAML…")
-    validate_yaml(output_file)
+        tools_content = tools_file.read_text()
+        system_config_content = system_config_file.read_text()
 
-    success("cloud-init.yml erfolgreich erstellt.")
+        package_runcmd = [
+            line.strip()
+            for line in package_config_file.read_text().splitlines()
+            if line.strip()
+        ]
 
-    # -------------------------------------------------------------------------
-    # /isos + Basis-Image + Overlay + VM
-    # -------------------------------------------------------------------------
-    print("\n=== VM-Setup ===")
+        # -------------------------------------------------------------------------
+        # Cloud-Init Template laden und anpassen
+        # -------------------------------------------------------------------------
+        try:
+            cloud_config = yaml.safe_load(template_file.read_text()) or {}
+        except Exception as e:
+            fail(f"Fehler beim Laden des Templates: {e}")
 
-    ensure_isos_folder()
-    ensure_base_image()
-    ensure_overlay_image(vmname)
-    create_vm(vmname)
+        cloud_config["users"] = [
+            {
+                "name": username,
+                "passwd": hashed_password,
+                "groups": ["sudo"],
+                "shell": "/bin/bash",
+                "sudo": ["ALL=(ALL) NOPASSWD:ALL"],
+                "ssh_authorized_keys": [ssh_key_content],
+            }
+        ]
 
-    success("Alle Schritte abgeschlossen.")
+        cloud_config["runcmd"] = package_runcmd + [
+            LiteralString(tools_content),
+            LiteralString(system_config_content),
+        ]
 
+        # -------------------------------------------------------------------------
+        # cloud-init.yml schreiben + validieren
+        # -------------------------------------------------------------------------
+        progress("Schreibe cloud-init.yml…")
+        try:
+            yaml_body = yaml.dump(cloud_config, sort_keys=False, Dumper=yaml.SafeDumper) 
+            content = "#cloud-config\n" + yaml_body 
+            output_file.write_text(content)
+        except Exception as e:
+            fail(f"Fehler beim Schreiben der cloud-init.yml: {e}")
+
+        progress("Validiere YAML…")
+        validate_yaml(output_file)
+
+        success("cloud-init.yml erfolgreich erstellt.")
+
+        # -------------------------------------------------------------------------
+        # /isos + Basis-Image + Overlay + VM
+        # -------------------------------------------------------------------------
+        print("\n=== VM-Setup ===")
+
+        ensure_isos_folder()
+        ensure_base_image()
+        ensure_overlay_image(vmname)
+        create_vm(vmname)
+
+        success("Alle Schritte abgeschlossen.")
+
+        save_session(
+            {
+                "vmname": vmname,
+                "username": username,
+                "ssh_key": str(pub_keys[sel]),
+                "cloud_init_path": str(output_file),
+            }
+        )
 
 if __name__ == "__main__":
     main()
