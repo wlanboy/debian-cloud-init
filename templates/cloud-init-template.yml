@@ -1,0 +1,7 @@
+#cloud-config
+
+# Dieser Bereich wird vom Python-Skript überschrieben
+users: []
+
+# runcmd wird dynamisch aus package-config.txt + Skriptdateien erzeugt
+runcmd: []
