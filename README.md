@@ -22,7 +22,7 @@ It needs mkpasswd (packaged with whois) to create the hash for the user password
 ```bash
 sudo apt-get install whois # to get mkpasswd binary
 
-python3 update-cloud-init.py
+python3 cloud-init-generator.py
 ```
 
 ## create cloud init
