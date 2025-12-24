@@ -4,9 +4,12 @@ import pathlib
 import sys
 import urllib.request
 import os
+import shutil
 import time
 import grp
 import json
+from yaml.representer import SafeRepresenter
+
 
 # =============================================================================
 # YAML Literal Block Support
@@ -88,6 +91,64 @@ def validate_yaml(path: pathlib.Path):
 
 
 # =============================================================================
+# SESSION MANAGEMENT
+# =============================================================================
+
+def load_session():
+    session_file = pathlib.Path(".session")
+    if not session_file.exists():
+        return None
+
+    print("⚠ Eine bestehende Session wurde gefunden.")
+    if ask_yes_no("Soll diese Session wiederholt werden?"):
+        try:
+            return json.loads(session_file.read_text())
+        except Exception:
+            fail("Session-Datei ist beschädigt.")
+    return None
+
+
+def save_session(data):
+    session_file = pathlib.Path(".session")
+    session_file.write_text(json.dumps(data, indent=2))
+    success("Session wurde gespeichert.")
+
+
+# =============================================================================
+# VM LÖSCHEN
+# =============================================================================
+
+def delete_vm(vmname):
+    result = subprocess.run(
+        f"virsh list --all | grep -w {vmname}",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+    if result.returncode != 0:
+        print("✔ Keine bestehende VM gefunden.")
+        return
+
+    print(f"⚠ VM '{vmname}' existiert bereits.")
+
+    if not ask_yes_no("Soll die bestehende VM gelöscht werden?"):
+        fail("Abbruch.")
+
+    progress("Stoppe VM…")
+    run_cmd(f"virsh destroy {vmname}")
+
+    progress("Lösche VM…")
+    run_cmd(f"virsh undefine {vmname} --remove-all-storage")
+
+    overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
+    if overlay.exists():
+        run_cmd(f"rm -f {overlay}")
+
+    success(f"VM '{vmname}' wurde vollständig gelöscht.")
+
+
+# =============================================================================
 # /isos Ordner + Images
 # =============================================================================
 
@@ -158,6 +219,10 @@ def ensure_overlay_image(vmname):
     success(f"Overlay-Image erstellt: /isos/{vmname}.qcow2")
 
 
+# =============================================================================
+# VM ERSTELLEN
+# =============================================================================
+
 def create_vm(vmname):
     # cloud-init.yml nach /isos kopieren
     src = pathlib.Path("cloud-init.yml")
@@ -171,7 +236,6 @@ def create_vm(vmname):
     run_cmd(f"chown {os.getlogin()}:kvm {dst}")
     success("cloud-init.yml wurde nach /isos kopiert.")
 
-    # VM anlegen?
     if not ask_yes_no("Soll die VM jetzt angelegt werden?"):
         print("VM-Erstellung übersprungen.")
         return
@@ -195,52 +259,3 @@ def create_vm(vmname):
     progress("Erstelle VM…")
     run_cmd(cmd)
     success(f"VM '{vmname}' wurde angelegt.")
-
-def load_session():
-    session_file = pathlib.Path(".session")
-    if not session_file.exists():
-        return None
-
-    print("⚠ Eine bestehende Session wurde gefunden.")
-    if ask_yes_no("Soll diese Session wiederholt werden?"):
-        try:
-            return json.loads(session_file.read_text())
-        except Exception:
-            fail("Session-Datei ist beschädigt.")
-    return None
-
-def save_session(data):
-    session_file = pathlib.Path(".session")
-    session_file.write_text(json.dumps(data, indent=2))
-    success("Session wurde gespeichert.")
-
-def delete_vm(vmname):
-    # Prüfen, ob VM existiert
-    result = subprocess.run(
-        f"virsh list --all | grep -w {vmname}",
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-
-    if result.returncode != 0:
-        print("✔ Keine bestehende VM gefunden.")
-        return
-
-    print(f"⚠ VM '{vmname}' existiert bereits.")
-
-    if not ask_yes_no("Soll die bestehende VM gelöscht werden?"):
-        fail("Abbruch.")
-
-    progress("Stoppe VM…")
-    run_cmd(f"sudo virsh destroy {vmname}")
-
-    progress("Lösche VM…")
-    run_cmd(f"sudo virsh undefine {vmname} --remove-all-storage")
-
-    overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
-    if overlay.exists():
-        run_cmd(f"sudo rm -f {overlay}")
-
-    success(f"VM '{vmname}' wurde vollständig gelöscht.")
-
