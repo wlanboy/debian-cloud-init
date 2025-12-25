@@ -18,7 +18,7 @@ cd ~
 wget "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
 tar -zxvf "helm-v${HELM_VERSION}-linux-amd64.tar.gz"
 sudo cp linux-amd64/helm /usr/local/bin/helm
-sudo install -m 555 linux-amd64/helm /usr/local/bin/khelmind
+sudo install -m 555 linux-amd64/helm /usr/local/bin/helm
 rm "helm-v${HELM_VERSION}-linux-amd64.tar.gz"
 rm -Rf linux-amd64
 
