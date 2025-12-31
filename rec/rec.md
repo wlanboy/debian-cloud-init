@@ -11,7 +11,12 @@ sudo mv agg /usr/local/bin/
 
 ## record terminal and transform to gif
 ```bash
-asciinema rec -c 'PS1="\W \$ " bash' vm_setup.cast
+export USER="wlanboy"
+export LOGNAME="wlanboy"
+export PS1=" \W > "
+asciinema rec -c "PS1='> ' bash --norc" vm_setup.cast
+uv run generator.py
+
 agg --theme dracula vm_setup.cast vm_setup.gif
 ```
 
