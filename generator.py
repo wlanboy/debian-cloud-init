@@ -16,12 +16,14 @@ from utils import (
     progress,
     success,
     fail,
-    load_session,
-    save_session,
     delete_vm,
     get_vm_ip,
     print_ssh_command,
     ask_yes_no,
+)
+
+from session import (
+    get_or_create_session,
 )
 
 
@@ -37,114 +39,35 @@ def main():
     # -------------------------------------------------------------------------
     # SESSION LADEN ODER NEUE PARAMETER ABFRAGEN
     # -------------------------------------------------------------------------
-    session = load_session()
+    session, is_persistent = get_or_create_session()
 
-    if session:
-        vmname = session["vmname"]
-        username = session["username"]
-        arch = session.get("arch", "amd64")
-        ssh_key_path = pathlib.Path(session["ssh_key"])
-        ssh_key_content = ssh_key_path.read_text().strip()
-        hashed_password = session["hashed_password"]
+    vmname = session["vmname"]
+    username = session["username"]
+    arch = session["arch"]
+    ssh_key_path = pathlib.Path(session["ssh_key"])
+    ssh_key_content = ssh_key_path.read_text().strip()
+    hashed_password = session["hashed_password"]
 
-        print(f"Session geladen: VM={vmname}, User={username}, Arch={arch}")
 
+    if is_persistent:
+        print(f"Session geladen: {vmname} ({arch})")
+        
+        # Prüfung ob VM läuft (Logik wie zuvor besprochen)
         try:
-            state = subprocess.run(
-                ["virsh", "domstate", vmname],
-                capture_output=True, text=True
-            ).stdout.strip()
-            
-            vm_exists = (state != "")
-            vm_running = (state == "running")
-        except Exception:
-            vm_exists = False
-            vm_running = False
-
-        if vm_exists:
-            print(f"Die VM '{vmname}' existiert bereits (Status: {state}).")
-            
-            if vm_running:
-                if ask_yes_no("Soll die IP-Adresse ermittelt und der SSH-Befehl angezeigt werden?"):
+            state = subprocess.run(["virsh", "domstate", vmname], capture_output=True, text=True).stdout.strip()
+            if state == "running":
+                if ask_yes_no(f"VM '{vmname}' läuft. IP anzeigen?"):
                     ip = get_vm_ip(vmname)
                     if ip:
                         print_ssh_command(username, ip)
-                    else:
-                        print("IP konnte (noch) nicht ermittelt werden. (Cloud-Init läuft evtl. noch)")
-                    
-                    if not ask_yes_no("Möchtest du die VM trotzdem löschen und neu erstellen?"):
-                        success("Beende Skript, VM bleibt unverändert.")
-                        return # Skript hier beenden
+                        return
             
-            # Wenn nicht laufend oder User will neu bauen:
-            if ask_yes_no(f"Soll die existierende VM '{vmname}' gelöscht werden, um sie neu zu erstellen?"):
+            if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
                 delete_vm(vmname)
             else:
-                fail("Abbruch durch Nutzer.")
-
-    else:
-        # Template prüfen
-        if not template_file.is_file():
-            fail(f"Template fehlt: {template_file}")
-
-        # Architektur-Abfrage
-        print("\nZiel-Architektur wählen:")
-        print("  [0] amd64 (x86_64)")
-        print("  [1] arm64 (aarch64)")
-        arch_choice = input("Auswahl [0]: ").strip() or "0"
-        arch = "arm64" if arch_choice == "1" else "amd64"
-
-        vmname = input("Name der VM (z. B. debian13): ").strip()
-        if not vmname:
-            fail("VM-Name darf nicht leer sein.")
-
-        username = input("Benutzername für die VM: ").strip()
-        password = getpass.getpass("Passwort (wird gehasht): ")
-
-        progress("Erstelle Passwort-Hash…")
-        try:
-            hashed_password = subprocess.run(
-                ["mkpasswd", "-m", "sha-512", password],
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-        except Exception:
-            fail("mkpasswd fehlt. Installiere: sudo apt install whois")
-
-        # SSH-Key auswählen
-        ssh_dir = pathlib.Path.home() / ".ssh"
-        pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
-
-        if not pub_keys:
-            fail("Keine öffentlichen SSH-Keys (*.pub) im ~/.ssh gefunden.")
-
-        print("\nVerfügbare SSH-Keys:")
-        for i, key in enumerate(pub_keys):
-            print(f"  [{i}] {key.name}")
-
-        while True:
-            try:
-                sel = int(input("Key auswählen: "))
-                if 0 <= sel < len(pub_keys):
-                    ssh_key_path = pub_keys[sel]
-                    ssh_key_content = ssh_key_path.read_text().strip()
-                    break
-            except Exception:
-                pass
-            print("Ungültige Auswahl.")
-
-        # Session speichern
-        save_session(
-            {
-                "vmname": vmname,
-                "arch": arch,
-                "username": username,
-                "ssh_key": str(ssh_key_path),
-                "cloud_init_path": str(output_file),
-                "hashed_password": hashed_password,
-            }
-        )
+                return
+        except:
+            pass
 
     # -------------------------------------------------------------------------
     # PROVISIONIERUNG LÄUFT IMMER (Session oder neu)
