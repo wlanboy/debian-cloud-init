@@ -39,9 +39,19 @@ def fail(msg):
     print(f"❌ {msg}")
     sys.exit(1)
 
-def ask_yes_no(question):
-    answer = input(f"{question} (y/n): ").strip().lower()
-    return answer == "y"
+def ask_yes_no(question, default=True):
+    suffix = "[J/n]" if default else "[j/N]"
+    while True:
+        ans = input(f"{question} {suffix}: ").strip().lower()
+        
+        if not ans:
+            return default
+        if ans in ["j", "y", "ja", "yes"]:
+            return True
+        if ans in ["n", "no", "nein"]:
+            return False
+        
+        print("Bitte mit 'j' für Ja oder 'n' für Nein antworten.")
 
 def run_cmd(cmd):
     print(f"→ {cmd}")
@@ -88,30 +98,6 @@ def validate_yaml(path: pathlib.Path):
         success("YAML-Validierung erfolgreich.")
     except yaml.YAMLError as e:
         fail(f"Ungültige YAML-Datei:\n{e}")
-
-
-# =============================================================================
-# SESSION MANAGEMENT
-# =============================================================================
-
-def load_session():
-    session_file = pathlib.Path(".session")
-    if not session_file.exists():
-        return None
-
-    print("⚠ Eine bestehende Session wurde gefunden.")
-    if ask_yes_no("Soll diese Session wiederholt werden?"):
-        try:
-            return json.loads(session_file.read_text())
-        except Exception:
-            fail("Session-Datei ist beschädigt.")
-    return None
-
-
-def save_session(data):
-    session_file = pathlib.Path(".session")
-    session_file.write_text(json.dumps(data, indent=2))
-    success("Session wurde gespeichert.")
 
 
 # =============================================================================
@@ -358,16 +344,3 @@ def print_ssh_command(username, ip):
     print(f"ssh {username}@{ip}")
     print("======================\n")
 
-def ask_yes_no(question, default=True):
-    suffix = "[J/n]" if default else "[j/N]"
-    while True:
-        ans = input(f"{question} {suffix}: ").strip().lower()
-        
-        if not ans:
-            return default
-        if ans in ["j", "y", "ja", "yes"]:
-            return True
-        if ans in ["n", "no", "nein"]:
-            return False
-        
-        print("Bitte mit 'j' für Ja oder 'n' für Nein antworten.")
