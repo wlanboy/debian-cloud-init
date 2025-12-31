@@ -19,6 +19,9 @@ from utils import (
     load_session,
     save_session,
     delete_vm,
+    get_vm_ip,
+    print_ssh_command,
+    ask_yes_no,
 )
 
 
@@ -39,19 +42,57 @@ def main():
     if session:
         vmname = session["vmname"]
         username = session["username"]
+        arch = session.get("arch", "amd64")
         ssh_key_path = pathlib.Path(session["ssh_key"])
         ssh_key_content = ssh_key_path.read_text().strip()
         hashed_password = session["hashed_password"]
 
-        print(f"Session geladen: VM={vmname}, User={username}")
+        print(f"Session geladen: VM={vmname}, User={username}, Arch={arch}")
 
-        # Alte VM löschen
-        delete_vm(vmname)
+        try:
+            state = subprocess.run(
+                ["virsh", "domstate", vmname],
+                capture_output=True, text=True
+            ).stdout.strip()
+            
+            vm_exists = (state != "")
+            vm_running = (state == "running")
+        except Exception:
+            vm_exists = False
+            vm_running = False
+
+        if vm_exists:
+            print(f"Die VM '{vmname}' existiert bereits (Status: {state}).")
+            
+            if vm_running:
+                if ask_yes_no("Soll die IP-Adresse ermittelt und der SSH-Befehl angezeigt werden?"):
+                    ip = get_vm_ip(vmname)
+                    if ip:
+                        print_ssh_command(username, ip)
+                    else:
+                        print("IP konnte (noch) nicht ermittelt werden. (Cloud-Init läuft evtl. noch)")
+                    
+                    if not ask_yes_no("Möchtest du die VM trotzdem löschen und neu erstellen?"):
+                        success("Beende Skript, VM bleibt unverändert.")
+                        return # Skript hier beenden
+            
+            # Wenn nicht laufend oder User will neu bauen:
+            if ask_yes_no(f"Soll die existierende VM '{vmname}' gelöscht werden, um sie neu zu erstellen?"):
+                delete_vm(vmname)
+            else:
+                fail("Abbruch durch Nutzer.")
 
     else:
         # Template prüfen
         if not template_file.is_file():
             fail(f"Template fehlt: {template_file}")
+
+        # Architektur-Abfrage
+        print("\nZiel-Architektur wählen:")
+        print("  [0] amd64 (x86_64)")
+        print("  [1] arm64 (aarch64)")
+        arch_choice = input("Auswahl [0]: ").strip() or "0"
+        arch = "arm64" if arch_choice == "1" else "amd64"
 
         vmname = input("Name der VM (z. B. debian13): ").strip()
         if not vmname:
@@ -97,6 +138,7 @@ def main():
         save_session(
             {
                 "vmname": vmname,
+                "arch": arch,
                 "username": username,
                 "ssh_key": str(ssh_key_path),
                 "cloud_init_path": str(output_file),
@@ -166,9 +208,9 @@ def main():
     print("\n=== VM-Setup ===")
 
     ensure_isos_folder()
-    ensure_base_image()
-    ensure_overlay_image(vmname)
-    create_vm(vmname,username)
+    ensure_base_image(arch)
+    ensure_overlay_image(vmname,arch)
+    create_vm(vmname,username,arch)
 
     success("Alle Schritte abgeschlossen.")
 
