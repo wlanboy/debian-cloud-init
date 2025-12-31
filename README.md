@@ -5,7 +5,7 @@ How to add user passwords with hashes and how to create harddisk images from tem
 
 ## screen recordings of tool
 ![Create VM](./vm_setup.gif)
-![Recreate VM](./vm_setup.gif)
+![Recreate VM](./vm_setup_rebuild.gif)
 
 ## sources for images
 - https://cdimage.debian.org/cdimage/cloud/
