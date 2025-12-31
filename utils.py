@@ -187,47 +187,57 @@ def ensure_isos_folder():
             fail("Abbruch.")
 
 
-def ensure_base_image():
-    base_img = pathlib.Path("/isos/debian-13-generic-amd64.qcow2")
+def ensure_base_image(arch="amd64"):
+    # Dateiname basierend auf Architektur
+    image_name = f"debian-13-generic-{arch}.qcow2"
+    base_img = pathlib.Path(f"/isos/{image_name}")
 
     if base_img.exists():
-        success("Basis-Image vorhanden.")
+        success(f"Basis-Image ({arch}) vorhanden.")
         return
 
-    print("⚠ Basis-Image fehlt.")
+    print(f"⚠ Basis-Image für {arch} fehlt.")
 
-    if ask_yes_no("Soll das Debian Cloud-Image heruntergeladen werden?"):
-        url = "https://cdimage.debian.org/cdimage/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
-        run_cmd(f"wget -O /isos/debian-13-generic-amd64.qcow2 {url}")
-        success("Basis-Image heruntergeladen.")
+    if ask_yes_no(f"Soll das Debian {arch} Cloud-Image heruntergeladen werden?"):
+        # URL Mapping
+        base_url = "https://cdimage.debian.org/cdimage/cloud/trixie/latest/"
+        url = f"{base_url}debian-13-generic-{arch}.qcow2"
+        
+        run_cmd(f"wget -O /isos/{image_name} {url}")
+        success(f"Basis-Image {arch} heruntergeladen.")
     else:
         fail("Abbruch.")
 
 
-def ensure_overlay_image(vmname):
+def ensure_overlay_image(vmname, arch):
     overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
+    base_image_path = f"/isos/debian-13-generic-{arch}.qcow2"
 
     if overlay.exists():
         print(f"⚠ Overlay-Image existiert bereits: {overlay}")
         if ask_yes_no("Löschen und neu erstellen?"):
             overlay.unlink()
         else:
-            fail("Abbruch.")
+            return
 
-    progress("Erstelle Overlay-Image…")
+    if not pathlib.Path(base_image_path).exists():
+        fail(f"Basis-Image für {arch} nicht gefunden unter {base_image_path}")
+
+    progress(f"Erstelle Overlay-Image ({arch})…")
     run_cmd(
         f"qemu-img create -f qcow2 "
-        f"-o backing_file=/isos/debian-13-generic-amd64.qcow2,backing_fmt=qcow2 "
+        f"-F qcow2 "  # explizites Backing-Format für neuere qemu-Versionen
+        f"-o backing_file={base_image_path} "
         f"/isos/{vmname}.qcow2 30G"
     )
-    success(f"Overlay-Image erstellt: /isos/{vmname}.qcow2")
+    success(f"Overlay-Image erstellt: /isos/{vmname}.qcow2 (Basis: {arch})")
 
 
 # =============================================================================
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname,username):
+def create_vm(vmname,username,arch):
     # cloud-init.yml nach /isos kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = pathlib.Path("/isos/cloud-init.yml")
@@ -243,15 +253,29 @@ def create_vm(vmname,username):
     if not ask_yes_no("Soll die VM jetzt angelegt werden?"):
         print("VM-Erstellung übersprungen.")
         return
+    
+    if arch == "arm64":
+        virt_type = "qemu"        # KVM geht nicht bei arch-cross
+        machine = "virt"          # Standard für ARM64
+        cpu_model = "max"         # 'max' emuliert alle verfügbaren ARM-Features
+        arch_binary = "aarch64"
+    else:
+        virt_type = "kvm"         # Nativ auf Ryzen 9
+        machine = "q35"
+        cpu_model = "host-passthrough"
+        arch_binary = "x86_64"
 
     cmd = (
         f"virt-install "
         f"--name {vmname} "
+        f"--arch {arch_binary} "
+        f"--machine {machine} "
+        f"--cpu {cpu_model} "
         "--memory 4096 "
-        "--vcpus 4 "
+        "--vcpus 2 "
         f"--disk /isos/{vmname}.qcow2,device=disk,bus=virtio "
         "--os-variant debian12 "
-        "--virt-type kvm "
+        f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "
         "--network network=default,model=virtio "
@@ -263,18 +287,13 @@ def create_vm(vmname,username):
 
     progress("Erstelle VM…")
     run_cmd(cmd)
-    success(f"VM '{vmname}' wurde angelegt.")
-
-    # IP-Adresse ermitteln 
-    ip = get_vm_ip(vmname) 
-    # SSH-Befehl anzeigen 
-    print_ssh_command(username, ip)
+    success(f"VM '{vmname}' in {arch} mit ({virt_type}-Modus) wurde angelegt und gestartet.")
 
 def get_vm_ip(vmname):
     progress("Warte darauf, dass die VM startet…")
 
     # Warten, bis die VM läuft
-    for _ in range(30):
+    for _ in range(120):
         state = subprocess.run(
             f"virsh domstate {vmname}",
             shell=True,
@@ -338,3 +357,17 @@ def print_ssh_command(username, ip):
     print("\n=== SSH-Verbindung ===")
     print(f"ssh {username}@{ip}")
     print("======================\n")
+
+def ask_yes_no(question, default=True):
+    suffix = "[J/n]" if default else "[j/N]"
+    while True:
+        ans = input(f"{question} {suffix}: ").strip().lower()
+        
+        if not ans:
+            return default
+        if ans in ["j", "y", "ja", "yes"]:
+            return True
+        if ans in ["n", "no", "nein"]:
+            return False
+        
+        print("Bitte mit 'j' für Ja oder 'n' für Nein antworten.")
