@@ -3,6 +3,10 @@ This repo describes how to auto install debain12 and debian13 with virsh-install
 Which images you can use, and which images you should not use.
 How to add user passwords with hashes and how to create harddisk images from templates.
 
+## screen recordings of tool
+![Create VM](./vm_setup.gif)
+![Recreate VM](./vm_setup.gif)
+
 ## sources for images
 - https://cdimage.debian.org/cdimage/cloud/
 - https://cloud-images.ubuntu.com/noble/current/
@@ -27,20 +31,20 @@ oder
 uv run generator.py
 ```
 
-## create cloud init
+## create cloud init without tool
 ```bash
 mkpasswd -m sha-512 # to generate hash for your user password
 cp cloud-init.yml /isos # copy cloud-init.yaml with inserted values
 ```
 
-## check supported os variant list
+### check supported os variant list
 ```bash
 virt-install --os-variant list
 
 virsh net-start host-bridge # check if host-bridge is running
 ```
 
-## Create base hard disk image and install debian12 with cloud init
+### Create base hard disk image and install debian12 with cloud init
 ```bash
 # create disk image for vm
 qemu-img create -f qcow2 -o backing_file=/isos/debian-12-generic-amd64.qcow2,backing_fmt=qcow2 /isos/debian-12.qcow2 30G 
@@ -60,7 +64,7 @@ virt-install \
   --import
 ```
 
-## Create base hard disk image and install debian13 with cloud init (needs uefi)
+### Create base hard disk image and install debian13 with cloud init (needs uefi)
 ```bash
 # create disk image for vm
 qemu-img create -f qcow2 -o backing_file=/isos/debian-13-generic-amd64.qcow2,backing_fmt=qcow2 /isos/debian-13.qcow2 30G
@@ -80,14 +84,14 @@ virt-install \
   --import
 ```
 
-## if install works for your usecase add following parameter for background install
+### if install works for your usecase add following parameter for background install
 ```
 virt-install \
 ...
 --noautoconsole \
 ```
 
-## delete vms
+### delete vms
 ```bash
 virsh shutdown debian12
 virsh destroy debian12
@@ -98,14 +102,14 @@ virsh destroy debian13
 virsh undefine debian13
 ```
 
-## cloud init tools
-### check cloud-init status
+### cloud init tools
+#### check cloud-init status
 ```bash
 sudo journalctl -u cloud-init
 sudo cat /var/log/cloud-init.log
 ```
 
-### trigger cloud init
+#### trigger cloud init
 ```bash
 sudo cloud-init clean
 sudo cloud-init init
