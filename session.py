@@ -2,7 +2,7 @@ import json
 import pathlib
 import subprocess
 import getpass
-from utils import progress, fail
+from utils import progress, fail, ask_yes_no
 
 SESSION_FILE = pathlib.Path(".session")
 
@@ -39,7 +39,7 @@ def get_or_create_session():
     vmname = input("Name der VM [debian13]: ").strip() or "debian13"
     username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
     hostname = vmname
-    
+
     # Passwort & Hashing
     password = getpass.getpass("Passwort für User: ")
     progress("Erstelle Passwort-Hash...")
@@ -68,13 +68,19 @@ def get_or_create_session():
         sel = input("Key auswählen [0]: ").strip() or "0"
         ssh_key_path = pub_keys[int(sel)]
 
+    if ask_yes_no("Soll das Netzwerk auf 'Bridge' (enp3s0) gesetzt werden? (Nein = Default NAT)"):
+        net_type = "bridge"
+    else:
+        net_type = "default"
+
     session_data = {
         "vmname": vmname,
         "hostname": hostname,
         "username": username,
         "arch": arch,
         "ssh_key": str(ssh_key_path),
-        "hashed_password": hashed_password
+        "hashed_password": hashed_password,
+        "net_type": net_type
     }
 
     save_session(session_data)

@@ -218,15 +218,36 @@ def ensure_overlay_image(vmname, arch):
     )
     success(f"Overlay-Image erstellt: /isos/{vmname}.qcow2 (Basis: {arch})")
 
+def create_meta_data(vmname, hostname=None):
+    """Erzeugt eine meta-data.yml in /isos für den Hostnamen."""
+    if hostname is None:
+        hostname = vmname
+        
+    meta_path = pathlib.Path("/isos/meta-data.yml")
+    
+    # Instance-ID ist oft ein Zeitstempel oder der VM-Name
+    # Sie signalisiert cloud-init, dass es sich um eine neue Instanz handelt
+    content = (
+        f"instance-id: {vmname}-{int(time.time())}\n"
+        f"local-hostname: {hostname}\n"
+    )
+    
+    try:
+        meta_path.write_text(content)
+        run_cmd(f"chown {os.getlogin()}:kvm {meta_path}")
+        success(f"meta-data.yml erstellt (Hostname: {hostname}).")
+    except Exception as e:
+        fail(f"Fehler beim Erstellen der meta-data.yml: {e}")
 
 # =============================================================================
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname,username,arch):
+def create_vm(vmname,username,arch,net_type="default"):
     # cloud-init.yml nach /isos kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = pathlib.Path("/isos/cloud-init.yml")
+    dstmd = pathlib.Path("/isos/meta-data.yml")
 
     if not src.exists():
         fail("cloud-init.yml wurde nicht gefunden. Erstelle zuerst die Cloud-Init-Datei.")
@@ -234,7 +255,18 @@ def create_vm(vmname,username,arch):
     progress("Kopiere cloud-init.yml nach /isos…")
     run_cmd(f"cp {src} {dst}")
     run_cmd(f"chown {os.getlogin()}:kvm {dst}")
+    run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
     success("cloud-init.yml wurde nach /isos kopiert.")
+
+    # Netzwerk-Konfiguration wählen
+    if net_type == "bridge":
+        # Direct/Bridge Modus (TAP)
+        net_config = "--network type=direct,source=enp3s0,source_mode=bridge,model=virtio"
+        progress("Verwende Bridge-Netzwerk (enp3s0)...")
+    else:
+        # Standard NAT
+        net_config = "--network network=default,model=virtio"
+        progress("Verwende Default-NAT-Netzwerk...")
 
     if not ask_yes_no("Soll die VM jetzt angelegt werden?"):
         print("VM-Erstellung übersprungen.")
@@ -264,8 +296,8 @@ def create_vm(vmname,username,arch):
         f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "
-        "--network network=default,model=virtio "
-        "--cloud-init user-data=/isos/cloud-init.yml "
+        f"{net_config} "
+        "--cloud-init user-data=/isos/cloud-init.yml,meta-data=/isos/meta-data.yml "
         "--boot uefi "
         "--noautoconsole "
         "--import"

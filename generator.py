@@ -20,6 +20,7 @@ from utils import (
     get_vm_ip,
     print_ssh_command,
     ask_yes_no,
+    create_meta_data
 )
 
 from session import (
@@ -42,11 +43,13 @@ def main():
     session, is_persistent = get_or_create_session()
 
     vmname = session["vmname"]
+    hostname = session["hostname"]
     username = session["username"]
     arch = session["arch"]
     ssh_key_path = pathlib.Path(session["ssh_key"])
     ssh_key_content = ssh_key_path.read_text().strip()
     hashed_password = session["hashed_password"]
+    net_type = session["net_type"]
 
 
     if is_persistent:
@@ -125,7 +128,7 @@ def main():
 
     progress("Validiere YAML…")
     validate_yaml(output_file)
-
+    create_meta_data(hostname)
     success("cloud-init.yml erfolgreich erstellt.")
 
     print("\n=== VM-Setup ===")
@@ -133,7 +136,7 @@ def main():
     ensure_isos_folder()
     ensure_base_image(arch)
     ensure_overlay_image(vmname,arch)
-    create_vm(vmname,username,arch)
+    create_vm(vmname,username,arch,net_type)
 
     success("Alle Schritte abgeschlossen.")
 
