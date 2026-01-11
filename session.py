@@ -38,6 +38,7 @@ def get_or_create_session():
     # Defaults
     vmname = input("Name der VM [debian13]: ").strip() or "debian13"
     username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
+    hostname = vmname
     
     # Passwort & Hashing
     password = getpass.getpass("Passwort für User: ")
@@ -69,6 +70,7 @@ def get_or_create_session():
 
     session_data = {
         "vmname": vmname,
+        "hostname": hostname,
         "username": username,
         "arch": arch,
         "ssh_key": str(ssh_key_path),
