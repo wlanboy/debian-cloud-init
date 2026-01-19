@@ -229,7 +229,7 @@ def create_meta_data(vmname, hostname=None):
     if hostname is None:
         hostname = vmname
         
-    meta_path = pathlib.Path("/isos/meta-data.yml")
+    meta_path = ISOS_PATH / "meta-data.yml"
     
     # Instance-ID ist oft ein Zeitstempel oder der VM-Name
     # Sie signalisiert cloud-init, dass es sich um eine neue Instanz handelt
@@ -304,7 +304,7 @@ def create_vm(vmname,username,arch,net_type="default"):
         "--graphics none "
         "--console pty,target_type=serial "
         f"{net_config} "
-        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'} meta-data={ISOS_PATH / 'cmeta-data.yml'} "
+        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},meta-data={ISOS_PATH / 'meta-data.yml'} "
         "--boot uefi "
         "--noautoconsole "
         "--import"
