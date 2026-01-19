@@ -68,7 +68,7 @@ def get_or_create_session():
         sel = input("Key auswählen [0]: ").strip() or "0"
         ssh_key_path = pub_keys[int(sel)]
 
-    if ask_yes_no("Soll das Netzwerk auf 'Bridge' (enp3s0) gesetzt werden? (Nein = Default NAT)"):
+    if ask_yes_no("Soll das Netzwerk auf 'Bridge' (enp1s0) gesetzt werden? (Nein = Default NAT)"):
         net_type = "bridge"
     else:
         net_type = "default"

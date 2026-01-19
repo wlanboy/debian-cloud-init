@@ -268,8 +268,8 @@ def create_vm(vmname,username,arch,net_type="default"):
     # Netzwerk-Konfiguration wählen
     if net_type == "bridge":
         # Direct/Bridge Modus (TAP)
-        net_config = "--network type=direct,source=enp3s0,source_mode=bridge,model=virtio"
-        progress("Verwende Bridge-Netzwerk (enp3s0)...")
+        net_config = "--network type=direct,source=enp1s0,source_mode=bridge,model=virtio"
+        progress("Verwende Bridge-Netzwerk (enp1s0)...")
     else:
         # Standard NAT
         net_config = "--network network=default,model=virtio"
