@@ -10,7 +10,7 @@ def load_session():
     if SESSION_FILE.exists():
         try:
             return json.loads(SESSION_FILE.read_text())
-        except:
+        except (json.JSONDecodeError, KeyError):
             return None
     return None
 

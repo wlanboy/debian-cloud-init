@@ -2,7 +2,6 @@
 
 import yaml
 import subprocess
-import getpass
 import pathlib
 
 from utils import (
@@ -66,10 +65,10 @@ def main():
                         return
             
             if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
-                delete_vm(vmname)
+                delete_vm(vmname, skip_confirm=True)
             else:
                 return
-        except:
+        except Exception:
             pass
 
     # -------------------------------------------------------------------------

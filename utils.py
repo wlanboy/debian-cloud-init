@@ -10,6 +10,12 @@ import grp
 import json
 from yaml.representer import SafeRepresenter
 
+# =============================================================================
+# KONFIGURATION
+# =============================================================================
+
+ISOS_PATH = pathlib.Path(os.environ.get("ISOS_PATH", "/isos"))
+
 
 # =============================================================================
 # YAML Literal Block Support
@@ -104,7 +110,7 @@ def validate_yaml(path: pathlib.Path):
 # VM LÖSCHEN
 # =============================================================================
 
-def delete_vm(vmname):
+def delete_vm(vmname, skip_confirm=False):
     # Prüfen, ob VM existiert
     result = subprocess.run(
         f"virsh list --all | grep -w {vmname}",
@@ -120,7 +126,7 @@ def delete_vm(vmname):
 
     print(f"⚠ VM '{vmname}' existiert bereits.")
 
-    if not ask_yes_no("Soll die bestehende VM gelöscht werden?"):
+    if not skip_confirm and not ask_yes_no("Soll die bestehende VM gelöscht werden?"):
         fail("Abbruch.")
 
     # VM stoppen
@@ -132,7 +138,7 @@ def delete_vm(vmname):
     run_cmd(f"virsh undefine {vmname} --remove-all-storage --nvram")
 
     # Overlay löschen
-    overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
+    overlay = ISOS_PATH / f"{vmname}.qcow2"
     if overlay.exists():
         run_cmd(f"rm -f {overlay}")
 
@@ -143,7 +149,7 @@ def delete_vm(vmname):
 # =============================================================================
 
 def ensure_isos_folder():
-    isos = pathlib.Path("/isos")
+    isos = ISOS_PATH
 
     if isos.exists():
         stat_info = isos.stat()
@@ -154,21 +160,21 @@ def ensure_isos_folder():
         kvm_gid = grp.getgrnam("kvm").gr_gid
 
         if owner == current_uid and group == kvm_gid:
-            success("/isos existiert und hat korrekte Rechte.")
+            success(f"{ISOS_PATH} existiert und hat korrekte Rechte.")
             return
         else:
-            print("⚠ /isos existiert, aber Rechte stimmen nicht.")
+            print(f"⚠ {ISOS_PATH} existiert, aber Rechte stimmen nicht.")
             if ask_yes_no("Rechte korrigieren?"):
-                run_cmd(f"sudo chown {os.getlogin()}:kvm /isos")
+                run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
                 success("Rechte korrigiert.")
             else:
                 fail("Abbruch.")
     else:
-        print("⚠ /isos existiert nicht.")
-        if ask_yes_no("Soll /isos erzeugt werden?"):
-            run_cmd("sudo mkdir /isos")
-            run_cmd(f"sudo chown {os.getlogin()}:kvm /isos")
-            success("/isos wurde angelegt.")
+        print(f"⚠ {ISOS_PATH} existiert nicht.")
+        if ask_yes_no(f"Soll {ISOS_PATH} erzeugt werden?"):
+            run_cmd(f"sudo mkdir -p {ISOS_PATH}")
+            run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
+            success(f"{ISOS_PATH} wurde angelegt.")
         else:
             fail("Abbruch.")
 
@@ -176,7 +182,7 @@ def ensure_isos_folder():
 def ensure_base_image(arch="amd64"):
     # Dateiname basierend auf Architektur
     image_name = f"debian-13-generic-{arch}.qcow2"
-    base_img = pathlib.Path(f"/isos/{image_name}")
+    base_img = ISOS_PATH / image_name
 
     if base_img.exists():
         success(f"Basis-Image ({arch}) vorhanden.")
@@ -189,15 +195,15 @@ def ensure_base_image(arch="amd64"):
         base_url = "https://cdimage.debian.org/cdimage/cloud/trixie/latest/"
         url = f"{base_url}debian-13-generic-{arch}.qcow2"
         
-        run_cmd(f"wget -O /isos/{image_name} {url}")
+        run_cmd(f"wget -O {ISOS_PATH / image_name} {url}")
         success(f"Basis-Image {arch} heruntergeladen.")
     else:
         fail("Abbruch.")
 
 
 def ensure_overlay_image(vmname, arch):
-    overlay = pathlib.Path(f"/isos/{vmname}.qcow2")
-    base_image_path = f"/isos/debian-13-generic-{arch}.qcow2"
+    overlay = ISOS_PATH / f"{vmname}.qcow2"
+    base_image_path = ISOS_PATH / f"debian-13-generic-{arch}.qcow2"
 
     if overlay.exists():
         print(f"⚠ Overlay-Image existiert bereits: {overlay}")
@@ -206,7 +212,7 @@ def ensure_overlay_image(vmname, arch):
         else:
             return
 
-    if not pathlib.Path(base_image_path).exists():
+    if not base_image_path.exists():
         fail(f"Basis-Image für {arch} nicht gefunden unter {base_image_path}")
 
     progress(f"Erstelle Overlay-Image ({arch})…")
@@ -214,9 +220,9 @@ def ensure_overlay_image(vmname, arch):
         f"qemu-img create -f qcow2 "
         f"-F qcow2 "  # explizites Backing-Format für neuere qemu-Versionen
         f"-o backing_file={base_image_path} "
-        f"/isos/{vmname}.qcow2 30G"
+        f"{overlay} 30G"
     )
-    success(f"Overlay-Image erstellt: /isos/{vmname}.qcow2 (Basis: {arch})")
+    success(f"Overlay-Image erstellt: {overlay} (Basis: {arch})")
 
 def create_meta_data(vmname, hostname=None):
     """Erzeugt eine meta-data.yml in /isos für den Hostnamen."""
@@ -246,17 +252,18 @@ def create_meta_data(vmname, hostname=None):
 def create_vm(vmname,username,arch,net_type="default"):
     # cloud-init.yml nach /isos kopieren
     src = pathlib.Path("cloud-init.yml")
-    dst = pathlib.Path("/isos/cloud-init.yml")
-    dstmd = pathlib.Path("/isos/meta-data.yml")
-
+    dst = ISOS_PATH / "cloud-init.yml"
+    dstmd = ISOS_PATH / "meta-data.yml"
+    
     if not src.exists():
         fail("cloud-init.yml wurde nicht gefunden. Erstelle zuerst die Cloud-Init-Datei.")
 
-    progress("Kopiere cloud-init.yml nach /isos…")
+    progress(f"Kopiere cloud-init.yml nach {ISOS_PATH}…")
     run_cmd(f"cp {src} {dst}")
     run_cmd(f"chown {os.getlogin()}:kvm {dst}")
     run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
     success("cloud-init.yml wurde nach /isos kopiert.")
+    success(f"cloud-init.yml wurde nach {ISOS_PATH} kopiert.")
 
     # Netzwerk-Konfiguration wählen
     if net_type == "bridge":
@@ -291,13 +298,13 @@ def create_vm(vmname,username,arch,net_type="default"):
         f"--cpu {cpu_model} "
         "--memory 4096 "
         "--vcpus 2 "
-        f"--disk /isos/{vmname}.qcow2,device=disk,bus=virtio "
+        f"--disk {ISOS_PATH / f'{vmname}.qcow2'},device=disk,bus=virtio "
         "--os-variant debian12 "
         f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "
         f"{net_config} "
-        "--cloud-init user-data=/isos/cloud-init.yml,meta-data=/isos/meta-data.yml "
+        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'} meta-data={ISOS_PATH / 'cmeta-data.yml'} "
         "--boot uefi "
         "--noautoconsole "
         "--import"
