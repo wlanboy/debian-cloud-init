@@ -68,10 +68,39 @@ def get_or_create_session():
         sel = input("Key auswählen [0]: ").strip() or "0"
         ssh_key_path = pub_keys[int(sel)]
 
-    if ask_yes_no("Soll das Netzwerk auf 'Bridge' (enp1s0) gesetzt werden? (Nein = Default NAT)"):
-        net_type = "bridge"
-    else:
-        net_type = "default"
+    # Netzwerk-Auswahl
+    net_type = "default"
+    bridge_interface = None
+
+    if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)"):
+        # Physische Interfaces ermitteln (keine virtuellen wie virbr0, docker0, etc.)
+        result = subprocess.run(
+            ["ip", "-o", "link", "show"],
+            capture_output=True, text=True
+        )
+
+        interfaces = []
+        for line in result.stdout.splitlines():
+            parts = line.split(": ")
+            if len(parts) >= 2:
+                iface = parts[1].split("@")[0]  # Entferne @... suffix
+                # Filtere virtuelle Interfaces aus
+                if iface not in ("lo",) and not iface.startswith(("virbr", "docker", "br-", "veth")):
+                    interfaces.append(iface)
+
+        if not interfaces:
+            print("⚠ Keine physischen Netzwerk-Interfaces gefunden. Verwende NAT.")
+        else:
+            print("\nVerfügbare Netzwerk-Interfaces:")
+            for i, iface in enumerate(interfaces):
+                print(f"  [{i}] {iface}")
+            sel = input(f"Interface auswählen [0]: ").strip() or "0"
+            try:
+                bridge_interface = interfaces[int(sel)]
+                net_type = "bridge"
+                print(f"✔ Bridge-Interface gewählt: {bridge_interface}")
+            except (ValueError, IndexError):
+                print("⚠ Ungültige Auswahl. Verwende NAT.")
 
     session_data = {
         "vmname": vmname,
@@ -80,7 +109,8 @@ def get_or_create_session():
         "arch": arch,
         "ssh_key": str(ssh_key_path),
         "hashed_password": hashed_password,
-        "net_type": net_type
+        "net_type": net_type,
+        "bridge_interface": bridge_interface
     }
 
     save_session(session_data)

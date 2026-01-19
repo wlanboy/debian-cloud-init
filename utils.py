@@ -249,12 +249,12 @@ def create_meta_data(vmname, hostname=None):
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname,username,arch,net_type="default"):
-    # cloud-init.yml nach /isos kopieren
+def create_vm(vmname, username, arch, net_type="default", bridge_interface=None):
+    # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = ISOS_PATH / "cloud-init.yml"
     dstmd = ISOS_PATH / "meta-data.yml"
-    
+
     if not src.exists():
         fail("cloud-init.yml wurde nicht gefunden. Erstelle zuerst die Cloud-Init-Datei.")
 
@@ -262,14 +262,13 @@ def create_vm(vmname,username,arch,net_type="default"):
     run_cmd(f"cp {src} {dst}")
     run_cmd(f"chown {os.getlogin()}:kvm {dst}")
     run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
-    success("cloud-init.yml wurde nach /isos kopiert.")
     success(f"cloud-init.yml wurde nach {ISOS_PATH} kopiert.")
 
     # Netzwerk-Konfiguration wählen
-    if net_type == "bridge":
-        # Direct/Bridge Modus (TAP)
-        net_config = "--network type=direct,source=enp1s0,source_mode=bridge,model=virtio"
-        progress("Verwende Bridge-Netzwerk (enp1s0)...")
+    if net_type == "bridge" and bridge_interface:
+        # Direct/Bridge Modus (macvtap)
+        net_config = f"--network type=direct,source={bridge_interface},source_mode=bridge,model=virtio"
+        progress(f"Verwende Bridge-Netzwerk ({bridge_interface})...")
     else:
         # Standard NAT
         net_config = "--network network=default,model=virtio"

@@ -49,6 +49,7 @@ def main():
     ssh_key_content = ssh_key_path.read_text().strip()
     hashed_password = session["hashed_password"]
     net_type = session["net_type"]
+    bridge_interface = session.get("bridge_interface")
 
 
     if is_persistent:
@@ -135,7 +136,7 @@ def main():
     ensure_isos_folder()
     ensure_base_image(arch)
     ensure_overlay_image(vmname,arch)
-    create_vm(vmname,username,arch,net_type)
+    create_vm(vmname, username, arch, net_type, bridge_interface)
 
     success("Alle Schritte abgeschlossen.")
 
