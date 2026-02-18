@@ -179,9 +179,30 @@ def ensure_isos_folder():
             fail("Abbruch.")
 
 
-def ensure_base_image(arch="amd64"):
-    # Dateiname basierend auf Architektur
-    image_name = f"debian-13-generic-{arch}.qcow2"
+def _os_variant(distro: str) -> str:
+    """Gibt den osinfo/virt-install os-variant String zurück."""
+    name, version = distro.split("/", 1)
+    if name == "ubuntu":
+        return f"ubuntu{version}"
+    return f"debian{version}"
+
+
+def _image_info(distro: str, arch: str) -> tuple[str, str]:
+    """Gibt (image_name, download_url) für die angegebene Distro/Arch zurück."""
+    name, version = distro.split("/", 1)
+    if name == "ubuntu":
+        image_name = f"ubuntu-{version}-server-cloudimg-{arch}.img"
+        url = f"https://cloud-images.ubuntu.com/releases/{version}/release/{image_name}"
+    else:
+        # Debian
+        codename = "trixie" if version == "13" else "bookworm"
+        image_name = f"debian-{version}-generic-{arch}.qcow2"
+        url = f"https://cdimage.debian.org/cdimage/cloud/{codename}/latest/{image_name}"
+    return image_name, url
+
+
+def ensure_base_image(arch="amd64", distro="debian/13"):
+    image_name, url = _image_info(distro, arch)
     base_img = ISOS_PATH / image_name
 
     if base_img.exists():
@@ -189,21 +210,19 @@ def ensure_base_image(arch="amd64"):
         return
 
     print(f"⚠ Basis-Image für {arch} fehlt.")
+    distro_label = distro.replace("/", " ")
 
-    if ask_yes_no(f"Soll das Debian {arch} Cloud-Image heruntergeladen werden?"):
-        # URL Mapping
-        base_url = "https://cdimage.debian.org/cdimage/cloud/trixie/latest/"
-        url = f"{base_url}debian-13-generic-{arch}.qcow2"
-        
+    if ask_yes_no(f"Soll das {distro_label.capitalize()} {arch} Cloud-Image heruntergeladen werden?"):
         run_cmd(f"wget -O {ISOS_PATH / image_name} {url}")
         success(f"Basis-Image {arch} heruntergeladen.")
     else:
         fail("Abbruch.")
 
 
-def ensure_overlay_image(vmname, arch):
+def ensure_overlay_image(vmname, arch, distro="debian/13"):
     overlay = ISOS_PATH / f"{vmname}.qcow2"
-    base_image_path = ISOS_PATH / f"debian-13-generic-{arch}.qcow2"
+    base_image_name, _ = _image_info(distro, arch)
+    base_image_path = ISOS_PATH / base_image_name
 
     if overlay.exists():
         print(f"⚠ Overlay-Image existiert bereits: {overlay}")
@@ -249,7 +268,7 @@ def create_meta_data(vmname, hostname=None):
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname, username, arch, net_type="default", bridge_interface=None):
+def create_vm(vmname, username, arch, net_type="default", bridge_interface=None, distro="debian/13"):
     # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = ISOS_PATH / "cloud-init.yml"
@@ -298,7 +317,7 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None)
         "--memory 4096 "
         "--vcpus 2 "
         f"--disk {ISOS_PATH / f'{vmname}.qcow2'},device=disk,bus=virtio "
-        "--os-variant debian12 "
+        f"--os-variant {_os_variant(distro)} "
         f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "

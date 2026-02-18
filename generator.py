@@ -44,6 +44,7 @@ def main():
     vmname = session["vmname"]
     hostname = session["hostname"]
     username = session["username"]
+    distro = session.get("distro", "debian/13")
     arch = session["arch"]
     ssh_key_path = pathlib.Path(session["ssh_key"])
     ssh_key_content = ssh_key_path.read_text().strip()
@@ -53,7 +54,7 @@ def main():
 
 
     if is_persistent:
-        print(f"Session geladen: {vmname} ({arch})")
+        print(f"Session geladen: {vmname} ({distro}, {arch})")
         
         # Prüfung ob VM läuft (Logik wie zuvor besprochen)
         try:
@@ -114,6 +115,20 @@ def main():
         LiteralString(system_config_content),
     ]
 
+    # Ubuntu: explizite Netzwerk-Konfiguration nötig, da der Interface-Name
+    # mit q35/virtio nicht dem Ubuntu-Default (ens3) entspricht.
+    if distro.startswith("ubuntu"):
+        cloud_config["network"] = {
+            "version": 2,
+            "ethernets": {
+                "all-en": {
+                    "match": {"name": "en*"},
+                    "dhcp4": True,
+                    "dhcp6": False,
+                }
+            },
+        }
+
     progress("Schreibe cloud-init.yml…")
     try:
         yaml_body = yaml.dump(
@@ -134,9 +149,9 @@ def main():
     print("\n=== VM-Setup ===")
 
     ensure_isos_folder()
-    ensure_base_image(arch)
-    ensure_overlay_image(vmname,arch)
-    create_vm(vmname, username, arch, net_type, bridge_interface)
+    ensure_base_image(arch, distro)
+    ensure_overlay_image(vmname, arch, distro)
+    create_vm(vmname, username, arch, net_type, bridge_interface, distro)
 
     success("Alle Schritte abgeschlossen.")
 

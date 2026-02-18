@@ -27,7 +27,23 @@ def get_or_create_session():
 
     # --- ELSE: Neue Session abfragen ---
     print("\n--- Neue VM-Parameter festlegen ---")
-    
+
+    # Distribution
+    distros = [
+        ("debian", "13"),
+        ("ubuntu", "24.04"),
+        ("ubuntu", "22.04"),
+    ]
+    print("Betriebssystem wählen:")
+    for i, (name, version) in enumerate(distros):
+        print(f"  [{i}] {name.capitalize()} {version}")
+    distro_choice = input("Auswahl [0]: ").strip() or "0"
+    try:
+        distro_name, distro_version = distros[int(distro_choice)]
+    except (ValueError, IndexError):
+        distro_name, distro_version = "debian", "13"
+    distro = f"{distro_name}/{distro_version}"
+
     # Architektur
     print("Ziel-Architektur wählen:")
     print("  [0] amd64 (x86_64)")
@@ -36,7 +52,8 @@ def get_or_create_session():
     arch = "arm64" if arch_choice == "1" else "amd64"
 
     # Defaults
-    vmname = input("Name der VM [debian13]: ").strip() or "debian13"
+    default_vmname = f"{distro_name}{distro_version.replace('.', '')}"
+    vmname = input(f"Name der VM [{default_vmname}]: ").strip() or default_vmname
     username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
     hostname = vmname
 
@@ -106,6 +123,7 @@ def get_or_create_session():
         "vmname": vmname,
         "hostname": hostname,
         "username": username,
+        "distro": distro,
         "arch": arch,
         "ssh_key": str(ssh_key_path),
         "hashed_password": hashed_password,
