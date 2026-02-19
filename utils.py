@@ -5,6 +5,7 @@ import sys
 import urllib.request
 import os
 import shutil
+import tempfile
 import time
 import grp
 import json
@@ -299,6 +300,34 @@ def create_meta_data(vmname, hostname=None):
 # VM ERSTELLEN
 # =============================================================================
 
+def create_seed_iso(vmname: str, network_config_file: pathlib.Path | None = None) -> pathlib.Path:
+    """Erstellt eine cloud-init Seed-ISO und bindet sie als SCSI-CDROM ein.
+
+    EFI + IDE CDROM (was --cloud-init intern erzeugt) ist inkompatibel.
+    Lösung: ISO manuell via genisoimage bauen → als SCSI CDROM anhängen.
+    Die NoCloud-Datasource erwartet die Dateinamen: user-data, meta-data, network-config.
+    """
+    seed_iso = ISOS_PATH / f"{vmname}-seed.iso"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        shutil.copy(ISOS_PATH / "cloud-init.yml", tmp / "user-data")
+        shutil.copy(ISOS_PATH / "meta-data.yml",  tmp / "meta-data")
+
+        extra = ""
+        if network_config_file:
+            shutil.copy(network_config_file, tmp / "network-config")
+            extra = f" {tmp / 'network-config'}"
+
+        run_cmd(
+            f"genisoimage -output {seed_iso} -volid cidata -joliet -rock "
+            f"{tmp / 'user-data'} {tmp / 'meta-data'}{extra}"
+        )
+
+    success(f"Seed-ISO erstellt: {seed_iso}")
+    return seed_iso
+
+
 def create_vm(vmname, username, arch, net_type="default", bridge_interface=None, distro="debian/13", network_config_file=None):
     # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
@@ -339,6 +368,18 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
         cpu_model = "host-passthrough"
         arch_binary = "x86_64"
 
+    # Ubuntu: EFI + IDE CDROM (intern von --cloud-init) ist inkompatibel.
+    # Lösung: Seed-ISO manuell bauen und als SCSI CDROM einbinden.
+    # Debian: --cloud-init funktioniert weiterhin.
+    if distro.startswith("ubuntu"):
+        seed_iso = create_seed_iso(vmname, network_config_file)
+        cloud_init_param = f"--disk {seed_iso},device=cdrom,bus=scsi "
+    else:
+        cloud_init_param = (
+            f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},"
+            f"meta-data={ISOS_PATH / 'meta-data.yml'} "
+        )
+
     cmd = (
         f"virt-install "
         f"--name {vmname} "
@@ -353,9 +394,7 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
         "--graphics none "
         "--console pty,target_type=serial "
         f"{net_config} "
-        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},meta-data={ISOS_PATH / 'meta-data.yml'}"
-        + (f",network-config={network_config_file}" if network_config_file else "")
-        + " "
+        f"{cloud_init_param}"
         "--boot uefi "
         "--noautoconsole "
         "--import"
