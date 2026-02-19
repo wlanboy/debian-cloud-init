@@ -31,6 +31,7 @@ def get_or_create_session():
     # Distribution
     distros = [
         ("debian", "13"),
+        ("debian", "12"),
         ("ubuntu", "24.04"),
         ("ubuntu", "22.04"),
     ]
