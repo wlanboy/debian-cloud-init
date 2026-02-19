@@ -173,7 +173,7 @@ def ensure_isos_folder():
         print(f"⚠ {ISOS_PATH} existiert nicht.")
         if ask_yes_no(f"Soll {ISOS_PATH} erzeugt werden?"):
             run_cmd(f"sudo mkdir -p {ISOS_PATH}")
-            run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
+            #run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
             success(f"{ISOS_PATH} wurde angelegt.")
         else:
             fail("Abbruch.")
@@ -269,7 +269,7 @@ def create_network_config(distro: str) -> pathlib.Path | None:
     path = ISOS_PATH / "network-config.yml"
     content = yaml.dump(net_cfg, sort_keys=False, Dumper=yaml.SafeDumper)
     path.write_text(content)
-    run_cmd(f"chown {os.getlogin()}:kvm {path}")
+    #run_cmd(f"chown {os.getlogin()}:kvm {path}")
     success(f"network-config.yml für Ubuntu erstellt ({path}).")
     return path
 
@@ -290,7 +290,7 @@ def create_meta_data(vmname, hostname=None):
     
     try:
         meta_path.write_text(content)
-        run_cmd(f"chown {os.getlogin()}:kvm {meta_path}")
+        #run_cmd(f"chown {os.getlogin()}:kvm {meta_path}")
         success(f"meta-data.yml erstellt (Hostname: {hostname}).")
     except Exception as e:
         fail(f"Fehler beim Erstellen der meta-data.yml: {e}")
@@ -310,8 +310,8 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
 
     progress(f"Kopiere cloud-init.yml nach {ISOS_PATH}…")
     run_cmd(f"cp {src} {dst}")
-    run_cmd(f"chown {os.getlogin()}:kvm {dst}")
-    run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
+    #run_cmd(f"chown {os.getlogin()}:kvm {dst}")
+    #run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
     success(f"cloud-init.yml wurde nach {ISOS_PATH} kopiert.")
 
     # Netzwerk-Konfiguration wählen
