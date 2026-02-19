@@ -104,6 +104,7 @@ def main():
         {
             "name": username,
             "passwd": hashed_password,
+            "lock_passwd": False,
             "groups": ["sudo"],
             "shell": "/bin/bash",
             "sudo": ["ALL=(ALL) NOPASSWD:ALL"],
