@@ -89,7 +89,7 @@ def get_or_create_session():
     net_type = "default"
     bridge_interface = None
 
-    if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)"):
+    if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)", default=False):
         # Physische Interfaces ermitteln (keine virtuellen wie virbr0, docker0, etc.)
         result = subprocess.run(
             ["ip", "-o", "link", "show"],
