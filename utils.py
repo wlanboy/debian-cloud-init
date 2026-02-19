@@ -143,6 +143,11 @@ def delete_vm(vmname, skip_confirm=False):
     if overlay.exists():
         run_cmd(f"rm -f {overlay}")
 
+    # Seed-ISO löschen
+    seed_iso = ISOS_PATH / f"{vmname}-seed.iso"
+    if seed_iso.exists():
+        run_cmd(f"rm -f {seed_iso}")
+
     success(f"VM '{vmname}' wurde vollständig gelöscht.")
 
 # =============================================================================
