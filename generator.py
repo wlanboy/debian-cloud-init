@@ -19,7 +19,8 @@ from utils import (
     get_vm_ip,
     print_ssh_command,
     ask_yes_no,
-    create_meta_data
+    create_meta_data,
+    create_network_config,
 )
 
 from session import (
@@ -44,6 +45,7 @@ def main():
     vmname = session["vmname"]
     hostname = session["hostname"]
     username = session["username"]
+    distro = session.get("distro", "debian/13")
     arch = session["arch"]
     ssh_key_path = pathlib.Path(session["ssh_key"])
     ssh_key_content = ssh_key_path.read_text().strip()
@@ -53,7 +55,7 @@ def main():
 
 
     if is_persistent:
-        print(f"Session geladen: {vmname} ({arch})")
+        print(f"Session geladen: {vmname} ({distro}, {arch})")
         
         # Prüfung ob VM läuft (Logik wie zuvor besprochen)
         try:
@@ -102,6 +104,7 @@ def main():
         {
             "name": username,
             "passwd": hashed_password,
+            "lock_passwd": False,
             "groups": ["sudo"],
             "shell": "/bin/bash",
             "sudo": ["ALL=(ALL) NOPASSWD:ALL"],
@@ -134,9 +137,13 @@ def main():
     print("\n=== VM-Setup ===")
 
     ensure_isos_folder()
-    ensure_base_image(arch)
-    ensure_overlay_image(vmname,arch)
-    create_vm(vmname, username, arch, net_type, bridge_interface)
+    ensure_base_image(arch, distro)
+    ensure_overlay_image(vmname, arch, distro)
+    # Für Ubuntu: separate network-config Datei erstellen, die cloud-init in der
+    # Local-Stage verarbeitet – BEVOR apt-get läuft und BEVOR das Netzwerk
+    # durch die falsche Default-Konfiguration (ens3 statt enp1s0) blockiert wird.
+    network_config_file = create_network_config(distro)
+    create_vm(vmname, username, arch, net_type, bridge_interface, distro, network_config_file)
 
     success("Alle Schritte abgeschlossen.")
 

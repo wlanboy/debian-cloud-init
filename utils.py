@@ -5,6 +5,7 @@ import sys
 import urllib.request
 import os
 import shutil
+import tempfile
 import time
 import grp
 import json
@@ -173,15 +174,36 @@ def ensure_isos_folder():
         print(f"⚠ {ISOS_PATH} existiert nicht.")
         if ask_yes_no(f"Soll {ISOS_PATH} erzeugt werden?"):
             run_cmd(f"sudo mkdir -p {ISOS_PATH}")
-            run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
+            #run_cmd(f"sudo chown {os.getlogin()}:kvm {ISOS_PATH}")
             success(f"{ISOS_PATH} wurde angelegt.")
         else:
             fail("Abbruch.")
 
 
-def ensure_base_image(arch="amd64"):
-    # Dateiname basierend auf Architektur
-    image_name = f"debian-13-generic-{arch}.qcow2"
+def _os_variant(distro: str) -> str:
+    """Gibt den osinfo/virt-install os-variant String zurück."""
+    name, version = distro.split("/", 1)
+    if name == "ubuntu":
+        return f"ubuntu{version}"
+    return f"debian{version}"
+
+
+def _image_info(distro: str, arch: str) -> tuple[str, str]:
+    """Gibt (image_name, download_url) für die angegebene Distro/Arch zurück."""
+    name, version = distro.split("/", 1)
+    if name == "ubuntu":
+        image_name = f"ubuntu-{version}-server-cloudimg-{arch}.img"
+        url = f"https://cloud-images.ubuntu.com/releases/{version}/release/{image_name}"
+    else:
+        # Debian
+        codename = "trixie" if version == "13" else "bookworm"
+        image_name = f"debian-{version}-generic-{arch}.qcow2"
+        url = f"https://cdimage.debian.org/cdimage/cloud/{codename}/latest/{image_name}"
+    return image_name, url
+
+
+def ensure_base_image(arch="amd64", distro="debian/13"):
+    image_name, url = _image_info(distro, arch)
     base_img = ISOS_PATH / image_name
 
     if base_img.exists():
@@ -189,21 +211,19 @@ def ensure_base_image(arch="amd64"):
         return
 
     print(f"⚠ Basis-Image für {arch} fehlt.")
+    distro_label = distro.replace("/", " ")
 
-    if ask_yes_no(f"Soll das Debian {arch} Cloud-Image heruntergeladen werden?"):
-        # URL Mapping
-        base_url = "https://cdimage.debian.org/cdimage/cloud/trixie/latest/"
-        url = f"{base_url}debian-13-generic-{arch}.qcow2"
-        
+    if ask_yes_no(f"Soll das {distro_label.capitalize()} {arch} Cloud-Image heruntergeladen werden?"):
         run_cmd(f"wget -O {ISOS_PATH / image_name} {url}")
         success(f"Basis-Image {arch} heruntergeladen.")
     else:
         fail("Abbruch.")
 
 
-def ensure_overlay_image(vmname, arch):
+def ensure_overlay_image(vmname, arch, distro="debian/13"):
     overlay = ISOS_PATH / f"{vmname}.qcow2"
-    base_image_path = ISOS_PATH / f"debian-13-generic-{arch}.qcow2"
+    base_image_name, _ = _image_info(distro, arch)
+    base_image_path = ISOS_PATH / base_image_name
 
     if overlay.exists():
         print(f"⚠ Overlay-Image existiert bereits: {overlay}")
@@ -224,6 +244,37 @@ def ensure_overlay_image(vmname, arch):
     )
     success(f"Overlay-Image erstellt: {overlay} (Basis: {arch})")
 
+def create_network_config(distro: str) -> pathlib.Path | None:
+    """Erstellt eine separate network-config Datei für Ubuntu (NoCloud-Datasource).
+
+    Diese Datei wird von cloud-init in der Local-Stage verarbeitet – also BEVOR
+    netzwerk-abhängige Operationen (apt-get) laufen. Das ist der entscheidende
+    Unterschied zum 'network'-Key in user-data, der erst in der Config-Stage greift.
+    Ubuntu-Cloud-Images kommen mit einer vordefinierten Netplan-Konfiguration für
+    'ens3' (i440fx-Naming), aber mit q35+virtio heißt das Interface 'enp1s0'.
+    """
+    if not distro.startswith("ubuntu"):
+        return None
+
+    net_cfg = {
+        "version": 2,
+        "ethernets": {
+            "all-en": {
+                "match": {"name": "en*"},
+                "dhcp4": True,
+                "dhcp6": False,
+            }
+        },
+    }
+
+    path = ISOS_PATH / "network-config.yml"
+    content = yaml.dump(net_cfg, sort_keys=False, Dumper=yaml.SafeDumper)
+    path.write_text(content)
+    #run_cmd(f"chown {os.getlogin()}:kvm {path}")
+    success(f"network-config.yml für Ubuntu erstellt ({path}).")
+    return path
+
+
 def create_meta_data(vmname, hostname=None):
     """Erzeugt eine meta-data.yml in /isos für den Hostnamen."""
     if hostname is None:
@@ -240,7 +291,7 @@ def create_meta_data(vmname, hostname=None):
     
     try:
         meta_path.write_text(content)
-        run_cmd(f"chown {os.getlogin()}:kvm {meta_path}")
+        #run_cmd(f"chown {os.getlogin()}:kvm {meta_path}")
         success(f"meta-data.yml erstellt (Hostname: {hostname}).")
     except Exception as e:
         fail(f"Fehler beim Erstellen der meta-data.yml: {e}")
@@ -249,7 +300,35 @@ def create_meta_data(vmname, hostname=None):
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname, username, arch, net_type="default", bridge_interface=None):
+def create_seed_iso(vmname: str, network_config_file: pathlib.Path | None = None) -> pathlib.Path:
+    """Erstellt eine cloud-init Seed-ISO und bindet sie als SCSI-CDROM ein.
+
+    EFI + IDE CDROM (was --cloud-init intern erzeugt) ist inkompatibel.
+    Lösung: ISO manuell via genisoimage bauen → als SCSI CDROM anhängen.
+    Die NoCloud-Datasource erwartet die Dateinamen: user-data, meta-data, network-config.
+    """
+    seed_iso = ISOS_PATH / f"{vmname}-seed.iso"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = pathlib.Path(tmpdir)
+        shutil.copy(ISOS_PATH / "cloud-init.yml", tmp / "user-data")
+        shutil.copy(ISOS_PATH / "meta-data.yml",  tmp / "meta-data")
+
+        extra = ""
+        if network_config_file:
+            shutil.copy(network_config_file, tmp / "network-config")
+            extra = f" {tmp / 'network-config'}"
+
+        run_cmd(
+            f"genisoimage -output {seed_iso} -volid cidata -joliet -rock "
+            f"{tmp / 'user-data'} {tmp / 'meta-data'}{extra}"
+        )
+
+    success(f"Seed-ISO erstellt: {seed_iso}")
+    return seed_iso
+
+
+def create_vm(vmname, username, arch, net_type="default", bridge_interface=None, distro="debian/13", network_config_file=None):
     # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = ISOS_PATH / "cloud-init.yml"
@@ -260,8 +339,8 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None)
 
     progress(f"Kopiere cloud-init.yml nach {ISOS_PATH}…")
     run_cmd(f"cp {src} {dst}")
-    run_cmd(f"chown {os.getlogin()}:kvm {dst}")
-    run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
+    #run_cmd(f"chown {os.getlogin()}:kvm {dst}")
+    #run_cmd(f"chown {os.getlogin()}:kvm {dstmd}")
     success(f"cloud-init.yml wurde nach {ISOS_PATH} kopiert.")
 
     # Netzwerk-Konfiguration wählen
@@ -289,6 +368,18 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None)
         cpu_model = "host-passthrough"
         arch_binary = "x86_64"
 
+    # Ubuntu: EFI + IDE CDROM (intern von --cloud-init) ist inkompatibel.
+    # Lösung: Seed-ISO manuell bauen und als SCSI CDROM einbinden.
+    # Debian: --cloud-init funktioniert weiterhin.
+    if distro.startswith("ubuntu"):
+        seed_iso = create_seed_iso(vmname, network_config_file)
+        cloud_init_param = f"--disk {seed_iso},device=cdrom,bus=scsi "
+    else:
+        cloud_init_param = (
+            f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},"
+            f"meta-data={ISOS_PATH / 'meta-data.yml'} "
+        )
+
     cmd = (
         f"virt-install "
         f"--name {vmname} "
@@ -298,12 +389,12 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None)
         "--memory 4096 "
         "--vcpus 2 "
         f"--disk {ISOS_PATH / f'{vmname}.qcow2'},device=disk,bus=virtio "
-        "--os-variant debian12 "
+        f"--os-variant {_os_variant(distro)} "
         f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "
         f"{net_config} "
-        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},meta-data={ISOS_PATH / 'meta-data.yml'} "
+        f"{cloud_init_param}"
         "--boot uefi "
         "--noautoconsole "
         "--import"
