@@ -19,7 +19,8 @@ from utils import (
     get_vm_ip,
     print_ssh_command,
     ask_yes_no,
-    create_meta_data
+    create_meta_data,
+    create_network_config,
 )
 
 from session import (
@@ -115,20 +116,6 @@ def main():
         LiteralString(system_config_content),
     ]
 
-    # Ubuntu: explizite Netzwerk-Konfiguration nötig, da der Interface-Name
-    # mit q35/virtio nicht dem Ubuntu-Default (ens3) entspricht.
-    if distro.startswith("ubuntu"):
-        cloud_config["network"] = {
-            "version": 2,
-            "ethernets": {
-                "all-en": {
-                    "match": {"name": "en*"},
-                    "dhcp4": True,
-                    "dhcp6": False,
-                }
-            },
-        }
-
     progress("Schreibe cloud-init.yml…")
     try:
         yaml_body = yaml.dump(
@@ -151,7 +138,11 @@ def main():
     ensure_isos_folder()
     ensure_base_image(arch, distro)
     ensure_overlay_image(vmname, arch, distro)
-    create_vm(vmname, username, arch, net_type, bridge_interface, distro)
+    # Für Ubuntu: separate network-config Datei erstellen, die cloud-init in der
+    # Local-Stage verarbeitet – BEVOR apt-get läuft und BEVOR das Netzwerk
+    # durch die falsche Default-Konfiguration (ens3 statt enp1s0) blockiert wird.
+    network_config_file = create_network_config(distro)
+    create_vm(vmname, username, arch, net_type, bridge_interface, distro, network_config_file)
 
     success("Alle Schritte abgeschlossen.")
 

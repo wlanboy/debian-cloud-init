@@ -243,6 +243,37 @@ def ensure_overlay_image(vmname, arch, distro="debian/13"):
     )
     success(f"Overlay-Image erstellt: {overlay} (Basis: {arch})")
 
+def create_network_config(distro: str) -> pathlib.Path | None:
+    """Erstellt eine separate network-config Datei für Ubuntu (NoCloud-Datasource).
+
+    Diese Datei wird von cloud-init in der Local-Stage verarbeitet – also BEVOR
+    netzwerk-abhängige Operationen (apt-get) laufen. Das ist der entscheidende
+    Unterschied zum 'network'-Key in user-data, der erst in der Config-Stage greift.
+    Ubuntu-Cloud-Images kommen mit einer vordefinierten Netplan-Konfiguration für
+    'ens3' (i440fx-Naming), aber mit q35+virtio heißt das Interface 'enp1s0'.
+    """
+    if not distro.startswith("ubuntu"):
+        return None
+
+    net_cfg = {
+        "version": 2,
+        "ethernets": {
+            "all-en": {
+                "match": {"name": "en*"},
+                "dhcp4": True,
+                "dhcp6": False,
+            }
+        },
+    }
+
+    path = ISOS_PATH / "network-config.yml"
+    content = yaml.dump(net_cfg, sort_keys=False, Dumper=yaml.SafeDumper)
+    path.write_text(content)
+    run_cmd(f"chown {os.getlogin()}:kvm {path}")
+    success(f"network-config.yml für Ubuntu erstellt ({path}).")
+    return path
+
+
 def create_meta_data(vmname, hostname=None):
     """Erzeugt eine meta-data.yml in /isos für den Hostnamen."""
     if hostname is None:
@@ -268,7 +299,7 @@ def create_meta_data(vmname, hostname=None):
 # VM ERSTELLEN
 # =============================================================================
 
-def create_vm(vmname, username, arch, net_type="default", bridge_interface=None, distro="debian/13"):
+def create_vm(vmname, username, arch, net_type="default", bridge_interface=None, distro="debian/13", network_config_file=None):
     # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = ISOS_PATH / "cloud-init.yml"
@@ -322,7 +353,9 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
         "--graphics none "
         "--console pty,target_type=serial "
         f"{net_config} "
-        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},meta-data={ISOS_PATH / 'meta-data.yml'} "
+        f"--cloud-init user-data={ISOS_PATH / 'cloud-init.yml'},meta-data={ISOS_PATH / 'meta-data.yml'}"
+        + (f",network-config={network_config_file}" if network_config_file else "")
+        + " "
         "--boot uefi "
         "--noautoconsole "
         "--import"
