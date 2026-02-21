@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: true # Enormer Speed-Boost für Folgeruns
+
+      - name: Install dependencies
+        # --frozen stellt sicher, dass exakt deine uv.lock verwendet wird
+        run: uv sync --frozen
+
+      - name: Lint & Syntax (Ruff)
+        # Ersetzt das manuelle py_compile für jede Datei. 
+        # Prüft das gesamte Projekt (inkl. scanner, extractor, etc.) auf einmal.
+        run: uv run ruff check .
+
+      - name: Type Check (Pyright)
+        # FastMCP profitiert extrem von Type-Checks für Tools und Resources
+        run: uv run pyright .
+
+      - name: Run Tests
+        # Führt deine Tests aus (erwartet pytest im Projekt)
+        run: uv run pytest
+
+      - name: Verify app imports
+        # Letzter Check: Lässt sich die App ohne Environment-Fehler importieren?
+        run: |
+          uv run python -c "from generator import main; print('🚀 app OK')"
