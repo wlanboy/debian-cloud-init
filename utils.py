@@ -8,8 +8,7 @@ import shutil
 import tempfile
 import time
 import grp
-import json
-from yaml.representer import SafeRepresenter
+from typing import NoReturn
 
 # =============================================================================
 # KONFIGURATION
@@ -42,7 +41,7 @@ def progress(msg):
 def success(msg):
     print(f"✔ {msg}")
 
-def fail(msg):
+def fail(msg) -> NoReturn:
     print(f"❌ {msg}")
     sys.exit(1)
 
@@ -71,14 +70,14 @@ def run_cmd(cmd):
 # Datei-Check + optionaler Download
 # =============================================================================
 
-def ensure_file_exists(path: pathlib.Path, download_url: str = None) -> bool:
+def ensure_file_exists(path: pathlib.Path, download_url: str | None = None) -> bool:
     if path.is_file():
         return True
 
     print(f"⚠ Datei fehlt: {path}")
 
     if download_url:
-        print(f"Download möglich über:")
+        print("Download möglich über:")
         print(f"  wget {download_url}")
 
         if ask_yes_no("Jetzt herunterladen?"):
@@ -337,8 +336,6 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
     # cloud-init.yml nach ISOS_PATH kopieren
     src = pathlib.Path("cloud-init.yml")
     dst = ISOS_PATH / "cloud-init.yml"
-    dstmd = ISOS_PATH / "meta-data.yml"
-
     if not src.exists():
         fail("cloud-init.yml wurde nicht gefunden. Erstelle zuerst die Cloud-Init-Datei.")
 

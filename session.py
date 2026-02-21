@@ -112,7 +112,7 @@ def get_or_create_session():
             print("\nVerfügbare Netzwerk-Interfaces:")
             for i, iface in enumerate(interfaces):
                 print(f"  [{i}] {iface}")
-            sel = input(f"Interface auswählen [0]: ").strip() or "0"
+            sel = input("Interface auswählen [0]: ").strip() or "0"
             try:
                 bridge_interface = interfaces[int(sel)]
                 net_type = "bridge"
