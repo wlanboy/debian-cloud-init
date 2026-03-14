@@ -1,7 +1,7 @@
 """Unit-Tests für utils.py"""
 
 import pathlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -13,7 +13,9 @@ from utils import (
     ask_yes_no,
     create_meta_data,
     create_network_config,
+    delete_vm,
     ensure_file_exists,
+    run_cmd,
     validate_yaml,
 )
 
@@ -263,3 +265,226 @@ class TestCreateMetaData:
                 create_meta_data("special-vm")
         content = (tmp_path / "meta-data.yml").read_text()
         assert "special-vm" in content
+
+
+# =============================================================================
+# _image_info – Cornercases
+# =============================================================================
+
+
+class TestImageInfoEdgeCases:
+    def test_missing_slash_raises(self):
+        """Kein '/' im Distro-String → ValueError beim Entpacken."""
+        with pytest.raises((ValueError, IndexError)):
+            _image_info("ubuntu", "amd64")
+
+    def test_unknown_debian_version_falls_back_to_bookworm(self):
+        """Dokumentiert den Bug: Debian 14+ wird fälschlich als 'bookworm' aufgelöst."""
+        _, url = _image_info("debian/14", "amd64")
+        # Erwartet wird ein Fehler, tatsächlich passiert es aber nicht → Bug
+        assert "bookworm" in url  # Bug: sollte "forky" o.ä. sein
+
+    def test_debian_version_in_image_name(self):
+        name, _ = _image_info("debian/14", "amd64")
+        assert "14" in name
+
+    def test_ubuntu_url_structure(self):
+        _, url = _image_info("ubuntu/24.04", "amd64")
+        assert url.startswith("https://cloud-images.ubuntu.com/releases/")
+        assert url.endswith(".img")
+
+    def test_debian_url_structure(self):
+        _, url = _image_info("debian/13", "amd64")
+        assert url.startswith("https://cdimage.debian.org/cdimage/cloud/")
+        assert url.endswith(".qcow2")
+
+
+# =============================================================================
+# _os_variant – Cornercases
+# =============================================================================
+
+
+class TestOsVariantEdgeCases:
+    def test_missing_slash_raises(self):
+        with pytest.raises((ValueError, IndexError)):
+            _os_variant("debian")
+
+    def test_ubuntu_result_starts_with_ubuntu(self):
+        assert _os_variant("ubuntu/22.04").startswith("ubuntu")
+
+    def test_debian_result_starts_with_debian(self):
+        assert _os_variant("debian/12").startswith("debian")
+
+
+# =============================================================================
+# ask_yes_no – Cornercases
+# =============================================================================
+
+
+class TestAskYesNoEdgeCases:
+    def test_answer_with_leading_trailing_whitespace_yes(self):
+        with patch("builtins.input", return_value="  j  "):
+            assert ask_yes_no("Test?") is True
+
+    def test_answer_with_leading_trailing_whitespace_no(self):
+        with patch("builtins.input", return_value="  N  "):
+            assert ask_yes_no("Test?") is False
+
+    def test_yes_fully_uppercase(self):
+        with patch("builtins.input", return_value="YES"):
+            assert ask_yes_no("Test?") is True
+
+    def test_no_fully_uppercase(self):
+        with patch("builtins.input", return_value="NO"):
+            assert ask_yes_no("Test?") is False
+
+    def test_nein_uppercase(self):
+        with patch("builtins.input", return_value="NEIN"):
+            assert ask_yes_no("Test?") is False
+
+    def test_many_invalid_inputs_then_valid(self):
+        inputs = ["abc", "123", "??", "vielleicht", "j"]
+        with patch("builtins.input", side_effect=inputs):
+            assert ask_yes_no("Test?") is True
+
+
+# =============================================================================
+# run_cmd
+# =============================================================================
+
+
+class TestRunCmd:
+    def test_success_does_not_exit(self):
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)):
+            run_cmd("echo test")  # darf nicht werfen
+
+    def test_failure_exits(self):
+        with patch("subprocess.run", return_value=MagicMock(returncode=1)):
+            with pytest.raises(SystemExit):
+                run_cmd("false")
+
+    def test_nonzero_returncode_exits(self):
+        with patch("subprocess.run", return_value=MagicMock(returncode=127)):
+            with pytest.raises(SystemExit):
+                run_cmd("command_not_found")
+
+
+# =============================================================================
+# create_meta_data – Cornercases
+# =============================================================================
+
+
+class TestCreateMetaDataEdgeCases:
+    def test_same_vmname_same_second_produces_same_instance_id(self, tmp_path):
+        """Dokumentiert: Gleicher vmname + gleiche Sekunde → identische instance-id (Kollision)."""
+        with patch("utils.ISOS_PATH", tmp_path):
+            with patch("utils.time.time", return_value=1000):
+                create_meta_data("vm1")
+                first = (tmp_path / "meta-data.yml").read_text()
+                create_meta_data("vm1")
+                second = (tmp_path / "meta-data.yml").read_text()
+        # Beide instance-ids sind identisch → bekannter Bug
+        assert "instance-id: vm1-1000" in first
+        assert "instance-id: vm1-1000" in second
+
+    def test_different_vmnames_same_second_no_collision(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path):
+            with patch("utils.time.time", return_value=1000):
+                create_meta_data("vm1")
+                content1 = (tmp_path / "meta-data.yml").read_text()
+                create_meta_data("vm2")
+                content2 = (tmp_path / "meta-data.yml").read_text()
+        assert "instance-id: vm1-1000" in content1
+        assert "instance-id: vm2-1000" in content2
+
+    def test_vmname_with_hyphens_and_digits(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path):
+            with patch("utils.time.time", return_value=1):
+                create_meta_data("my-vm-01")
+        content = (tmp_path / "meta-data.yml").read_text()
+        assert "my-vm-01" in content
+
+    def test_meta_data_file_is_valid_yaml(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path):
+            with patch("utils.time.time", return_value=42):
+                create_meta_data("testvm")
+        content = (tmp_path / "meta-data.yml").read_text()
+        parsed = yaml.safe_load(content)
+        assert "instance-id" in parsed or content.startswith("instance-id:")
+
+    def test_hostname_not_same_as_vmname_different_values(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path):
+            with patch("utils.time.time", return_value=1):
+                create_meta_data("myvm", hostname="other-host")
+        content = (tmp_path / "meta-data.yml").read_text()
+        assert "local-hostname: other-host" in content
+        assert "instance-id: myvm-1" in content
+
+
+# =============================================================================
+# delete_vm
+# =============================================================================
+
+
+class TestDeleteVm:
+    def test_vm_not_found_returns_silently(self):
+        with patch("subprocess.run", return_value=MagicMock(returncode=1)):
+            with patch("utils.time.sleep"):
+                delete_vm("nonexistent-vm")  # kein Fehler, kein SystemExit
+
+    def test_vm_exists_user_declines_exits(self):
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.ask_yes_no", return_value=False), \
+             patch("utils.time.sleep"):
+            with pytest.raises(SystemExit):
+                delete_vm("myvm")
+
+    def test_vm_exists_user_confirms_calls_undefine(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path), \
+             patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.ask_yes_no", return_value=True), \
+             patch("utils.run_cmd") as mock_run_cmd, \
+             patch("utils.time.sleep"):
+            delete_vm("myvm")
+        calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
+        assert "undefine" in calls
+
+    def test_vm_exists_skip_confirm_calls_undefine(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path), \
+             patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.run_cmd") as mock_run_cmd, \
+             patch("utils.time.sleep"):
+            delete_vm("myvm", skip_confirm=True)
+        calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
+        assert "undefine" in calls
+
+    def test_overlay_deleted_when_exists(self, tmp_path):
+        overlay = tmp_path / "myvm.qcow2"
+        overlay.write_text("fake image")
+        with patch("utils.ISOS_PATH", tmp_path), \
+             patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.run_cmd") as mock_run_cmd, \
+             patch("utils.time.sleep"):
+            delete_vm("myvm", skip_confirm=True)
+        calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
+        assert "myvm.qcow2" in calls
+
+    def test_seed_iso_deleted_when_exists(self, tmp_path):
+        seed = tmp_path / "myvm-seed.iso"
+        seed.write_text("fake iso")
+        with patch("utils.ISOS_PATH", tmp_path), \
+             patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.run_cmd") as mock_run_cmd, \
+             patch("utils.time.sleep"):
+            delete_vm("myvm", skip_confirm=True)
+        calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
+        assert "myvm-seed.iso" in calls
+
+    def test_no_extra_files_no_rm_calls(self, tmp_path):
+        with patch("utils.ISOS_PATH", tmp_path), \
+             patch("subprocess.run", return_value=MagicMock(returncode=0)), \
+             patch("utils.run_cmd") as mock_run_cmd, \
+             patch("utils.time.sleep"):
+            delete_vm("myvm", skip_confirm=True)
+        calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
+        assert "rm -f" not in calls
