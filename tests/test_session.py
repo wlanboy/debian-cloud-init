@@ -1,8 +1,9 @@
 """Unit-Tests für session.py"""
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 from session import get_or_create_session, load_session, save_session
 
@@ -132,3 +133,147 @@ class TestGetOrCreateSessionExisting:
             session, _ = get_or_create_session()
         assert session["distro"] == "ubuntu/24.04"
         assert session["arch"] == "arm64"
+
+
+# =============================================================================
+# get_or_create_session – neue Session
+# =============================================================================
+
+
+def _setup_ssh_key(tmp_path):
+    """Legt ein einzelnes .pub-File in tmp_path/.ssh an."""
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    key = ssh_dir / "id_rsa.pub"
+    key.write_text("ssh-rsa AAAAB3NzaC1 user@host")
+    return key
+
+
+def _mkpasswd_mock():
+    m = MagicMock()
+    m.stdout = "$6$salt$hashedpassword\n"
+    m.returncode = 0
+    return m
+
+
+class TestGetOrCreateSessionNew:
+    def test_defaults_produce_debian13_amd64(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, is_persistent = get_or_create_session()
+        assert is_persistent is False
+        assert session["distro"] == "debian/13"
+        assert session["arch"] == "amd64"
+        assert session["vmname"] == "debian13"
+        assert session["username"] == "wlanboy"
+        assert session["net_type"] == "default"
+        assert session["bridge_interface"] is None
+
+    def test_new_session_saved_to_file(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            get_or_create_session()
+        assert session_file.exists()
+        data = json.loads(session_file.read_text())
+        assert "vmname" in data
+        assert "distro" in data
+
+    def test_password_hash_stored_in_session(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, _ = get_or_create_session()
+        assert session["hashed_password"] == "$6$salt$hashedpassword"
+
+    def test_distro_choice_2_selects_ubuntu_2404(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        # Auswahl [2] = ubuntu/24.04; vmname und username auf Default
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["2", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, _ = get_or_create_session()
+        assert session["distro"] == "ubuntu/24.04"
+        assert session["vmname"] == "ubuntu2404"
+
+    def test_arch_choice_1_selects_arm64(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "1", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, _ = get_or_create_session()
+        assert session["arch"] == "arm64"
+
+    def test_invalid_distro_choice_falls_back_to_default(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["99", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, _ = get_or_create_session()
+        assert session["distro"] == "debian/13"
+
+    def test_custom_vmname_and_username(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "custom-vm", "myuser"]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            session, _ = get_or_create_session()
+        assert session["vmname"] == "custom-vm"
+        assert session["username"] == "myuser"
+
+    def test_no_ssh_keys_exits(self, tmp_path):
+        session_file = tmp_path / ".session"
+        # .ssh-Verzeichnis existiert, aber ohne .pub-Dateien
+        (tmp_path / ".ssh").mkdir()
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", return_value=_mkpasswd_mock()), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            with pytest.raises(SystemExit):
+                get_or_create_session()
+
+    def test_mkpasswd_fails_exits(self, tmp_path):
+        session_file = tmp_path / ".session"
+        _setup_ssh_key(tmp_path)
+        with patch("session.SESSION_FILE", session_file), \
+             patch("builtins.input", side_effect=["", "", "", ""]), \
+             patch("getpass.getpass", return_value="secret"), \
+             patch("subprocess.run", side_effect=Exception("mkpasswd not found")), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             patch("session.ask_yes_no", return_value=False):
+            with pytest.raises(SystemExit):
+                get_or_create_session()
