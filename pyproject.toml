@@ -1,7 +1,7 @@
 [project]
 name = "debian-cloud-init"
 version = "0.1.0"
-description = "Add your description here"
+description = "Create libvirt vm of debian 12 and 13 with cloud init - with amd64 and arm64 support"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
