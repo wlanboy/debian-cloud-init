@@ -1,5 +1,7 @@
 # record terminal
 
+Dieses Dokument beschreibt, wie Terminal-Sessions mit [asciinema](https://asciinema.org/) aufgezeichnet und anschließend mit `agg` in animierte GIFs umgewandelt werden. Die erzeugten GIFs eignen sich zur Dokumentation von VM-Setup-Abläufen.
+
 ## install tools
 
 ```bash
@@ -10,6 +12,7 @@ sudo mv agg /usr/local/bin/
 ```
 
 ## record terminal and transform to gif
+
 ```bash
 export USER="wlanboy"
 export LOGNAME="wlanboy"
