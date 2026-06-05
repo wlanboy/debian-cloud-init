@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ui import ask_yes_no, fail, run_cmd
+from debian_cloud_init.ui import ask_yes_no, fail, run_cmd
 
 
 # =============================================================================

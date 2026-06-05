@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from cloud_init import (
+from debian_cloud_init.cloud_init import (
     LiteralString,
     create_meta_data,
     create_network_config,
@@ -48,7 +48,7 @@ class TestEnsureFileExists:
         assert ensure_file_exists(tmp_path / "missing.txt") is False
 
     def test_missing_file_with_url_user_declines_exits(self, tmp_path):
-        with patch("cloud_init.ask_yes_no", return_value=False):
+        with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=False):
             with pytest.raises(SystemExit):
                 ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
 
@@ -58,12 +58,12 @@ class TestEnsureFileExists:
         def fake_urlretrieve(url, path):
             pathlib.Path(path).write_text("content")
 
-        with patch("cloud_init.ask_yes_no", return_value=True), \
+        with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=True), \
              patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
             assert ensure_file_exists(f, download_url="https://example.com/file") is True
 
     def test_missing_file_with_url_download_fails_exits(self, tmp_path):
-        with patch("cloud_init.ask_yes_no", return_value=True), \
+        with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=True), \
              patch("urllib.request.urlretrieve", side_effect=OSError("network error")):
             with pytest.raises(SystemExit):
                 ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
@@ -99,31 +99,31 @@ class TestValidateYaml:
 
 class TestCreateMetaData:
     def test_vmname_used_as_hostname(self, tmp_path):
-        with patch("cloud_init.time.time", return_value=12345):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=12345):
             create_meta_data("myvm", tmp_path)
         content = (tmp_path / "meta-data.yml").read_text()
         assert "local-hostname: myvm" in content
         assert "instance-id: myvm-12345" in content
 
     def test_instance_id_contains_vmname(self, tmp_path):
-        with patch("cloud_init.time.time", return_value=1):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=1):
             create_meta_data("special-vm", tmp_path)
         assert "special-vm" in (tmp_path / "meta-data.yml").read_text()
 
     def test_output_is_valid_yaml(self, tmp_path):
-        with patch("cloud_init.time.time", return_value=42):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=42):
             create_meta_data("testvm", tmp_path)
         content = (tmp_path / "meta-data.yml").read_text()
         assert yaml.safe_load(content) is not None
 
     def test_vmname_with_hyphens_and_digits(self, tmp_path):
-        with patch("cloud_init.time.time", return_value=1):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=1):
             create_meta_data("my-vm-01", tmp_path)
         assert "my-vm-01" in (tmp_path / "meta-data.yml").read_text()
 
     def test_same_vmname_same_second_same_instance_id(self, tmp_path):
         """Dokumentiert: gleicher vmname + gleiche Sekunde → identische instance-id."""
-        with patch("cloud_init.time.time", return_value=1000):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=1000):
             create_meta_data("vm1", tmp_path)
             first = (tmp_path / "meta-data.yml").read_text()
             create_meta_data("vm1", tmp_path)
@@ -132,7 +132,7 @@ class TestCreateMetaData:
         assert "instance-id: vm1-1000" in second
 
     def test_different_vmnames_no_collision(self, tmp_path):
-        with patch("cloud_init.time.time", return_value=1000):
+        with patch("debian_cloud_init.cloud_init.time.time", return_value=1000):
             create_meta_data("vm1", tmp_path)
             content1 = (tmp_path / "meta-data.yml").read_text()
             create_meta_data("vm2", tmp_path)

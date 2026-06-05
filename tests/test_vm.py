@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vm import (
+from debian_cloud_init.vm import (
     _image_info,
     _os_variant,
     create_seed_iso,
@@ -108,45 +108,45 @@ class TestEnsureIsosFolder:
 
     def test_exists_correct_permissions_returns_silently(self):
         mock_path = self._mock_path(exists=True, st_uid=1000, st_gid=2000)
-        with patch("vm.ISOS_PATH", mock_path), \
-             patch("vm.os.getuid", return_value=1000), \
-             patch("vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)):
+        with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
+             patch("debian_cloud_init.vm.os.getuid", return_value=1000), \
+             patch("debian_cloud_init.vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)):
             ensure_isos_folder()  # kein SystemExit
 
     def test_exists_wrong_uid_user_confirms_chown(self):
         mock_path = self._mock_path(exists=True, st_uid=999, st_gid=2000)
-        with patch("vm.ISOS_PATH", mock_path), \
-             patch("vm.os.getuid", return_value=1000), \
-             patch("vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.os.getlogin", return_value="testuser"):
+        with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
+             patch("debian_cloud_init.vm.os.getuid", return_value=1000), \
+             patch("debian_cloud_init.vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.os.getlogin", return_value="testuser"):
             ensure_isos_folder()
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "chown" in calls
 
     def test_exists_wrong_permissions_user_declines_exits(self):
         mock_path = self._mock_path(exists=True, st_uid=999, st_gid=2000)
-        with patch("vm.ISOS_PATH", mock_path), \
-             patch("vm.os.getuid", return_value=1000), \
-             patch("vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)), \
-             patch("vm.ask_yes_no", return_value=False):
+        with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
+             patch("debian_cloud_init.vm.os.getuid", return_value=1000), \
+             patch("debian_cloud_init.vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
             with pytest.raises(SystemExit):
                 ensure_isos_folder()
 
     def test_not_exists_user_confirms_creates_folder(self):
         mock_path = self._mock_path(exists=False)
-        with patch("vm.ISOS_PATH", mock_path), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_isos_folder()
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "mkdir" in calls
 
     def test_not_exists_user_declines_exits(self):
         mock_path = self._mock_path(exists=False)
-        with patch("vm.ISOS_PATH", mock_path), \
-             patch("vm.ask_yes_no", return_value=False):
+        with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
             with pytest.raises(SystemExit):
                 ensure_isos_folder()
 
@@ -159,36 +159,36 @@ class TestEnsureIsosFolder:
 class TestEnsureBaseImage:
     def test_image_exists_returns_silently(self, tmp_path):
         (tmp_path / "debian-13-generic-amd64.qcow2").write_text("fake")
-        with patch("vm.ISOS_PATH", tmp_path):
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path):
             ensure_base_image("amd64", "debian/13")
 
     def test_image_missing_user_confirms_runs_wget(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_base_image("amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "wget" in calls
         assert "debian-13-generic-amd64.qcow2" in calls
 
     def test_image_missing_user_declines_exits(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=False):
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
             with pytest.raises(SystemExit):
                 ensure_base_image("amd64", "debian/13")
 
     def test_ubuntu_image_name_in_wget_call(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_base_image("amd64", "ubuntu/24.04")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "ubuntu-24.04-server-cloudimg-amd64.img" in calls
 
     def test_arm64_image_name_in_wget_call(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_base_image("arm64", "debian/13")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "arm64" in calls
@@ -201,14 +201,14 @@ class TestEnsureBaseImage:
 
 class TestEnsureOverlayImage:
     def test_no_overlay_no_base_exits(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path):
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path):
             with pytest.raises(SystemExit):
                 ensure_overlay_image("myvm", "amd64", "debian/13")
 
     def test_base_exists_creates_overlay_via_qemu_img(self, tmp_path):
         (tmp_path / "debian-13-generic-amd64.qcow2").write_text("fake base")
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_overlay_image("myvm", "amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "qemu-img" in calls
@@ -216,8 +216,8 @@ class TestEnsureOverlayImage:
 
     def test_qemu_img_uses_30g_size(self, tmp_path):
         (tmp_path / "debian-13-generic-amd64.qcow2").write_text("fake base")
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_overlay_image("myvm", "amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "30G" in calls
@@ -225,18 +225,18 @@ class TestEnsureOverlayImage:
     def test_overlay_exists_user_confirms_recreate(self, tmp_path):
         (tmp_path / "debian-13-generic-amd64.qcow2").write_text("fake base")
         (tmp_path / "myvm.qcow2").write_text("old overlay")
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_overlay_image("myvm", "amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "qemu-img" in calls
 
     def test_overlay_exists_user_declines_no_qemu_call(self, tmp_path):
         (tmp_path / "myvm.qcow2").write_text("old overlay")
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.ask_yes_no", return_value=False), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             ensure_overlay_image("myvm", "amd64", "debian/13")
         mock_run_cmd.assert_not_called()
 
@@ -253,22 +253,22 @@ class TestCreateSeedIso:
 
     def test_returns_correct_path(self, tmp_path):
         self._setup_isos(tmp_path)
-        with patch("vm.ISOS_PATH", tmp_path), patch("vm.run_cmd"):
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), patch("debian_cloud_init.vm.run_cmd"):
             result = create_seed_iso("myvm")
         assert result == tmp_path / "myvm-seed.iso"
 
     def test_genisoimage_called(self, tmp_path):
         self._setup_isos(tmp_path)
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             create_seed_iso("myvm")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "genisoimage" in calls
 
     def test_without_network_config_no_network_config_arg(self, tmp_path):
         self._setup_isos(tmp_path)
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             create_seed_iso("myvm")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "network-config" not in calls
@@ -277,16 +277,16 @@ class TestCreateSeedIso:
         self._setup_isos(tmp_path)
         net_cfg = tmp_path / "network-config.yml"
         net_cfg.write_text("version: 2\n")
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             create_seed_iso("myvm", network_config_file=net_cfg)
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "network-config" in calls
 
     def test_cidata_volid_set(self, tmp_path):
         self._setup_isos(tmp_path)
-        with patch("vm.ISOS_PATH", tmp_path), \
-             patch("vm.run_cmd") as mock_run_cmd:
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd:
             create_seed_iso("myvm")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "cidata" in calls
@@ -300,60 +300,60 @@ class TestCreateSeedIso:
 class TestDeleteVm:
     def test_vm_not_found_returns_silently(self):
         with patch("subprocess.run", return_value=MagicMock(returncode=1)), \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("nonexistent-vm")
 
     def test_vm_exists_user_declines_exits(self):
         with patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.ask_yes_no", return_value=False), \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
+             patch("debian_cloud_init.vm.time.sleep"):
             with pytest.raises(SystemExit):
                 delete_vm("myvm")
 
     def test_vm_exists_user_confirms_calls_undefine(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.ask_yes_no", return_value=True), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=True), \
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("myvm")
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "undefine" in calls
 
     def test_skip_confirm_bypasses_question(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("myvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "undefine" in calls
 
     def test_overlay_deleted_when_exists(self, tmp_path):
         (tmp_path / "myvm.qcow2").write_text("fake image")
-        with patch("vm.ISOS_PATH", tmp_path), \
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("myvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "myvm.qcow2" in calls
 
     def test_seed_iso_deleted_when_exists(self, tmp_path):
         (tmp_path / "myvm-seed.iso").write_text("fake iso")
-        with patch("vm.ISOS_PATH", tmp_path), \
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("myvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "myvm-seed.iso" in calls
 
     def test_no_extra_files_no_rm_calls(self, tmp_path):
-        with patch("vm.ISOS_PATH", tmp_path), \
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)), \
-             patch("vm.run_cmd") as mock_run_cmd, \
-             patch("vm.time.sleep"):
+             patch("debian_cloud_init.vm.run_cmd") as mock_run_cmd, \
+             patch("debian_cloud_init.vm.time.sleep"):
             delete_vm("myvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_run_cmd.call_args_list)
         assert "rm -f" not in calls

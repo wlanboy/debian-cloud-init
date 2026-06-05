@@ -39,10 +39,31 @@ This python script manages the full VM lifecycle:
 It needs `mkpasswd` (packaged with `whois`) and `genisoimage` to work.
 ```bash
 sudo apt-get install whois genisoimage
+```
 
-python3 generator.py
-# or
+### install as wheel (recommended)
+```bash
+# build
+uv build
+
+# install globally
+uv tool install dist/debian_cloud_init-0.1.0-py3-none-any.whl
+
+# run from any directory containing a templates/ folder
+debian-cloud-init
+
+# uninstall
+uv tool uninstall debian-cloud-init
+
+# reinstall after rebuild
+uv tool install --force dist/debian_cloud_init-0.1.0-py3-none-any.whl
+```
+
+### run without installing
+```bash
 uv run generator.py
+# or
+python3 -m debian_cloud_init.generator
 ```
 
 ### supported distributions and architectures

@@ -1,0 +1,133 @@
+import json
+import pathlib
+import subprocess
+import getpass
+
+from .ui import ask_yes_no, fail, progress
+
+SESSION_FILE = pathlib.Path(".session")
+
+def load_session():
+    if SESSION_FILE.exists():
+        try:
+            return json.loads(SESSION_FILE.read_text())
+        except (json.JSONDecodeError, KeyError):
+            return None
+    return None
+
+def save_session(data):
+    SESSION_FILE.write_text(json.dumps(data, indent=4))
+
+def get_or_create_session():
+    session = load_session()
+
+    if session:
+        return session, True
+
+    # --- ELSE: Neue Session abfragen ---
+    print("\n--- Neue VM-Parameter festlegen ---")
+
+    # Distribution
+    distros = [
+        ("debian", "13"),
+        ("debian", "12"),
+        ("ubuntu", "24.04"),
+        ("ubuntu", "22.04"),
+    ]
+    print("Betriebssystem wählen:")
+    for i, (name, version) in enumerate(distros):
+        print(f"  [{i}] {name.capitalize()} {version}")
+    distro_choice = input("Auswahl [0]: ").strip() or "0"
+    try:
+        distro_name, distro_version = distros[int(distro_choice)]
+    except (ValueError, IndexError):
+        distro_name, distro_version = "debian", "13"
+    distro = f"{distro_name}/{distro_version}"
+
+    # Architektur
+    print("Ziel-Architektur wählen:")
+    print("  [0] amd64 (x86_64)")
+    print("  [1] arm64 (aarch64)")
+    arch_choice = input("Auswahl [0]: ").strip() or "0"
+    arch = "arm64" if arch_choice == "1" else "amd64"
+
+    # Defaults
+    default_vmname = f"{distro_name}{distro_version.replace('.', '')}"
+    vmname = input(f"Name der VM [{default_vmname}]: ").strip() or default_vmname
+    username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
+    hostname = vmname
+
+    # Passwort & Hashing
+    password = getpass.getpass("Passwort für User: ")
+    progress("Erstelle Passwort-Hash...")
+    try:
+        hashed_password = subprocess.run(
+            ["mkpasswd", "-m", "sha-512", password],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except Exception:
+        fail("mkpasswd fehlt. Installiere: sudo apt install whois")
+
+    # SSH-Key Auswahl
+    ssh_dir = pathlib.Path.home() / ".ssh"
+    pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
+
+    if not pub_keys:
+        fail("Keine .pub Keys in ~/.ssh gefunden!")
+
+    if len(pub_keys) == 1:
+        ssh_key_path = pub_keys[0]
+        print(f"Einziger Key automatisch gewählt: {ssh_key_path.name}")
+    else:
+        print("\nVerfügbare SSH-Keys:")
+        for i, key in enumerate(pub_keys):
+            print(f"  [{i}] {key.name}")
+        sel = input("Key auswählen [0]: ").strip() or "0"
+        ssh_key_path = pub_keys[int(sel)]
+
+    # Netzwerk-Auswahl
+    net_type = "default"
+    bridge_interface = None
+
+    if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)", default=False):
+        result = subprocess.run(
+            ["ip", "-o", "link", "show"],
+            capture_output=True, text=True
+        )
+
+        interfaces = []
+        for line in result.stdout.splitlines():
+            parts = line.split(": ")
+            if len(parts) >= 2:
+                iface = parts[1].split("@")[0]
+                if iface not in ("lo",) and not iface.startswith(("virbr", "docker", "br-", "veth")):
+                    interfaces.append(iface)
+
+        if not interfaces:
+            print("⚠ Keine physischen Netzwerk-Interfaces gefunden. Verwende NAT.")
+        else:
+            print("\nVerfügbare Netzwerk-Interfaces:")
+            for i, iface in enumerate(interfaces):
+                print(f"  [{i}] {iface}")
+            sel = input("Interface auswählen [0]: ").strip() or "0"
+            try:
+                bridge_interface = interfaces[int(sel)]
+                net_type = "bridge"
+                print(f"✔ Bridge-Interface gewählt: {bridge_interface}")
+            except (ValueError, IndexError):
+                print("⚠ Ungültige Auswahl. Verwende NAT.")
+
+    session_data = {
+        "vmname": vmname,
+        "hostname": hostname,
+        "username": username,
+        "distro": distro,
+        "arch": arch,
+        "ssh_key": str(ssh_key_path),
+        "hashed_password": hashed_password,
+        "net_type": net_type,
+        "bridge_interface": bridge_interface
+    }
+
+    save_session(session_data)
+    return session_data, False

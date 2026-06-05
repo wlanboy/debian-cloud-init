@@ -1,12 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "debian-cloud-init"
 version = "0.1.0"
 description = "Create libvirt vm of debian 12 and 13 with cloud init - with amd64 and arm64 support"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "pyyaml>=6.0.3",
 ]
+
+[project.scripts]
+debian-cloud-init = "debian_cloud_init.generator:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["debian_cloud_init"]
 
 [dependency-groups]
 dev = [
