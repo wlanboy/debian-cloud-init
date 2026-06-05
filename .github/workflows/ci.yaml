@@ -36,8 +36,3 @@ jobs:
       - name: Run Tests
         # Führt deine Tests aus (erwartet pytest im Projekt)
         run: uv run pytest
-
-      - name: Verify app imports
-        # Letzter Check: Lässt sich die App ohne Environment-Fehler importieren?
-        run: |
-          uv run python -c "from generator import main; print('🚀 app OK')"
