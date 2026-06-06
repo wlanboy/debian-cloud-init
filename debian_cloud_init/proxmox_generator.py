@@ -50,24 +50,8 @@ def main():
     ssh_key_content = ssh_key_path.read_text().strip()
     hashed_password = session["hashed_password"]
 
-    if is_persistent:
-        print(f"Session geladen: {vmname} (ID {vmid}) auf {host} ({distro}, {arch})")
-        result = ssh_run(host, ssh_user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
-        if "running" in result.stdout:
-            if ask_yes_no(f"VM {vmid} läuft. IP anzeigen?"):
-                ip = get_vm_ip(host, ssh_user, node, vmid)
-                if ip:
-                    print_ssh_command(username, ip)
-                return
-
-        if ask_yes_no(f"Soll VM {vmid} ({vmname}) gelöscht und neu erstellt werden?"):
-            delete_vm(host, ssh_user, vmid, vmname, skip_confirm=True)
-            delete_session(vmname)
-        else:
-            return
-
     # -------------------------------------------------------------------------
-    # CLOUD-INIT GENERIEREN
+    # CLOUD-INIT GENERIEREN (immer, unabhängig vom VM-Zustand)
     # -------------------------------------------------------------------------
 
     ensure_file_exists(
@@ -124,6 +108,22 @@ def main():
     progress("Validiere YAML…")
     validate_yaml(output_file)
     success("cloud-init.yml erfolgreich erstellt.")
+
+    if is_persistent:
+        print(f"Session geladen: {vmname} (ID {vmid}) auf {host} ({distro}, {arch})")
+        result = ssh_run(host, ssh_user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
+        if "running" in result.stdout:
+            if ask_yes_no(f"VM {vmid} läuft. IP anzeigen?"):
+                ip = get_vm_ip(host, ssh_user, node, vmid)
+                if ip:
+                    print_ssh_command(username, ip)
+                return
+
+        if ask_yes_no(f"Soll VM {vmid} ({vmname}) gelöscht und neu erstellt werden?"):
+            delete_vm(host, ssh_user, vmid, vmname, skip_confirm=True)
+            delete_session(vmname)
+        else:
+            return
 
     # -------------------------------------------------------------------------
     # VM AUF PROXMOX ANLEGEN

@@ -50,27 +50,8 @@ def main():
     net_type = session["net_type"]
     bridge_interface = session.get("bridge_interface")
 
-    if is_persistent:
-        print(f"Session geladen: {vmname} ({distro}, {arch})")
-        try:
-            state = subprocess.run(["virsh", "domstate", vmname], capture_output=True, text=True).stdout.strip()
-            if state == "running":
-                if ask_yes_no(f"VM '{vmname}' läuft. IP anzeigen?"):
-                    ip = get_vm_ip(vmname)
-                    if ip:
-                        print_ssh_command(username, ip)
-                        return
-
-            if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
-                delete_vm(vmname, skip_confirm=True)
-                delete_session(vmname)
-            else:
-                return
-        except Exception:
-            pass
-
     # -------------------------------------------------------------------------
-    # PROVISIONIERUNG
+    # CLOUD-INIT GENERIEREN (immer, unabhängig vom VM-Zustand)
     # -------------------------------------------------------------------------
 
     ensure_file_exists(
@@ -123,6 +104,25 @@ def main():
     validate_yaml(output_file)
     create_meta_data(vmname, ISOS_PATH)
     success("cloud-init.yml erfolgreich erstellt.")
+
+    if is_persistent:
+        print(f"Session geladen: {vmname} ({distro}, {arch})")
+        try:
+            state = subprocess.run(["virsh", "domstate", vmname], capture_output=True, text=True).stdout.strip()
+            if state == "running":
+                if ask_yes_no(f"VM '{vmname}' läuft. IP anzeigen?"):
+                    ip = get_vm_ip(vmname)
+                    if ip:
+                        print_ssh_command(username, ip)
+                        return
+
+            if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
+                delete_vm(vmname, skip_confirm=True)
+                delete_session(vmname)
+            else:
+                return
+        except Exception:
+            pass
 
     print("\n=== VM-Setup ===")
 
