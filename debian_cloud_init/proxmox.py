@@ -5,7 +5,7 @@ import tempfile
 import time
 from typing import Literal, overload
 
-from .ui import ask_yes_no, fail, progress, success
+from .ui import ask_int, ask_yes_no, fail, progress, success
 
 
 # =============================================================================
@@ -168,14 +168,30 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
         print("VM-Erstellung übersprungen.")
         return
 
+    DEFAULT_CORES = 2
+    DEFAULT_MEMORY = 4096
+    DEFAULT_DISK_GB = 30
+
+    if ask_yes_no(
+        f"Standard-Größe verwenden? (CPU: {DEFAULT_CORES} Kerne, RAM: {DEFAULT_MEMORY} MB, Disk: {DEFAULT_DISK_GB} GB)",
+        default=True,
+    ):
+        cores = DEFAULT_CORES
+        memory = DEFAULT_MEMORY
+        disk_gb = DEFAULT_DISK_GB
+    else:
+        cores = ask_int("CPU-Kerne", DEFAULT_CORES)
+        memory = ask_int("RAM in MB", DEFAULT_MEMORY)
+        disk_gb = ask_int("Disk-Größe in GB", DEFAULT_DISK_GB)
+
     # Basis-VM anlegen
     progress(f"Erstelle VM {vmid} ({vmname})…")
     machine = "virt" if arch == "arm64" else "q35"
     ssh_run(host, user,
         f"qm create {vmid}"
         f" --name {vmname}"
-        f" --memory 4096"
-        f" --cores 2"
+        f" --memory {memory}"
+        f" --cores {cores}"
         f" --cpu host"
         f" --machine {machine}"
         f" --net0 virtio,bridge={bridge}"
@@ -205,7 +221,7 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
     ssh_run(host, user,
         f"qm set {vmid} --scsihw virtio-scsi-pci --scsi0 {disk_ref}"
     )
-    ssh_run(host, user, f"qm resize {vmid} scsi0 30G")
+    ssh_run(host, user, f"qm resize {vmid} scsi0 {disk_gb}G")
 
     # Cloud-Init Drive hinzufügen
     progress("Füge Cloud-Init Drive hinzu…")

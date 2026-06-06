@@ -27,6 +27,43 @@ def _save_all(sessions: dict):
     SESSION_FILE.write_text(json.dumps(sessions, indent=4))
 
 
+def _sync_sessions(sessions: dict) -> dict:
+    """Prüft für jede Session ob die VM auf Proxmox existiert, entfernt verwaiste Einträge."""
+    from .proxmox import ssh_run  # lokaler Import um zirkuläre Imports zu vermeiden
+
+    print("\n--- Sessions mit Proxmox abgleichen ---")
+
+    missing = []
+    for name, s in sessions.items():
+        host = s["proxmox_host"]
+        user = s["proxmox_ssh_user"]
+        vmid = s["proxmox_vmid"]
+        print(f"  Prüfe {name} (ID {vmid}) auf {host}…", end=" ", flush=True)
+        result = ssh_run(host, user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
+        if result.returncode == 0 and result.stdout.strip():
+            print(f"✔ {result.stdout.strip()}")
+        else:
+            print("✘ nicht gefunden")
+            missing.append(name)
+
+    if not missing:
+        print("\nAlle Sessions haben eine entsprechende VM auf Proxmox.")
+        return sessions
+
+    print(f"\n{len(missing)} Session(s) ohne VM auf Proxmox:")
+    for name in missing:
+        s = sessions[name]
+        print(f"  - {name} (ID: {s['proxmox_vmid']}, Host: {s['proxmox_host']})")
+
+    if ask_yes_no("Diese Sessions löschen?"):
+        for name in missing:
+            del sessions[name]
+        _save_all(sessions)
+        print(f"✔ {len(missing)} Session(s) entfernt.")
+
+    return sessions
+
+
 def _select_session(sessions: dict) -> tuple[dict, bool]:
     """Zeigt vorhandene Sessions zur Auswahl. Gibt (session, is_persistent) zurück."""
     names = list(sessions.keys())
@@ -37,6 +74,7 @@ def _select_session(sessions: dict) -> tuple[dict, bool]:
         print(f"  [{i}] {name}  (ID: {s['proxmox_vmid']}, {s['proxmox_host']}, {s['distro']}, {s['arch']})")
     print("  [n] Neue VM erstellen")
     print("  [i] Bestehende VM importieren")
+    print("  [s] Sessions mit Proxmox abgleichen")
 
     choice = input("Auswahl [0]: ").strip().lower()
 
@@ -44,6 +82,11 @@ def _select_session(sessions: dict) -> tuple[dict, bool]:
         return _create_session(sessions)
     if choice == "i":
         return _import_session(sessions)
+    if choice == "s":
+        sessions = _sync_sessions(sessions)
+        if not sessions:
+            return _create_session(sessions)
+        return _select_session(sessions)
 
     try:
         idx = int(choice) if choice else 0
