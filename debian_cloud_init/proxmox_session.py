@@ -35,10 +35,10 @@ def _select_session(sessions: dict) -> tuple[dict, bool]:
     for i, name in enumerate(names):
         s = sessions[name]
         print(f"  [{i}] {name}  (ID: {s['proxmox_vmid']}, {s['proxmox_host']}, {s['distro']}, {s['arch']})")
-    print(f"  [n] Neue VM erstellen")
-    print(f"  [i] Bestehende VM importieren")
+    print("  [n] Neue VM erstellen")
+    print("  [i] Bestehende VM importieren")
 
-    choice = input(f"Auswahl [0]: ").strip().lower()
+    choice = input("Auswahl [0]: ").strip().lower()
 
     if choice == "n":
         return _create_session(sessions)

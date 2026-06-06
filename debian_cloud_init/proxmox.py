@@ -3,6 +3,7 @@ import pathlib
 import subprocess
 import tempfile
 import time
+from typing import Literal, overload
 
 from .ui import ask_yes_no, fail, progress, success
 
@@ -14,7 +15,11 @@ from .ui import ask_yes_no, fail, progress, success
 _SSH_OPTS = ["-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes"]
 
 
-def ssh_run(host: str, user: str, cmd: str, *, check: bool = True, capture: bool = False):
+@overload
+def ssh_run(host: str, user: str, cmd: str, *, check: bool = ..., capture: Literal[True]) -> subprocess.CompletedProcess[str]: ...
+@overload
+def ssh_run(host: str, user: str, cmd: str, *, check: bool = ..., capture: Literal[False] = ...) -> subprocess.CompletedProcess[bytes]: ...
+def ssh_run(host: str, user: str, cmd: str, *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
     full_cmd = ["ssh"] + _SSH_OPTS + [f"{user}@{host}", cmd]
     if capture:
         result = subprocess.run(full_cmd, capture_output=True, text=True)
@@ -123,7 +128,7 @@ def upload_snippets(host: str, user: str, snippets_path: str, vmname: str,
         for tmp in tmp_files:
             tmp.unlink(missing_ok=True)
 
-    success(f"Snippets hochgeladen: user-data, meta-data, network-config")
+    success("Snippets hochgeladen: user-data, meta-data, network-config")
 
 
 # =============================================================================

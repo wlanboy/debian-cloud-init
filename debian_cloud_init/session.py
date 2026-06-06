@@ -8,6 +8,19 @@ from .ui import ask_yes_no, fail, progress
 SESSION_FILE = pathlib.Path(".session")
 
 
+def load_session() -> dict | None:
+    if not SESSION_FILE.exists():
+        return None
+    try:
+        return json.loads(SESSION_FILE.read_text())
+    except (json.JSONDecodeError, KeyError):
+        return None
+
+
+def save_session(data: dict):
+    SESSION_FILE.write_text(json.dumps(data, indent=4))
+
+
 def _load_all() -> dict:
     if not SESSION_FILE.exists():
         return {}
