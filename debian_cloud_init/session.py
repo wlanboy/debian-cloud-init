@@ -1,33 +1,58 @@
+import getpass
 import json
 import pathlib
 import subprocess
-import getpass
 
 from .ui import ask_yes_no, fail, progress
 
 SESSION_FILE = pathlib.Path(".session")
 
-def load_session():
-    if SESSION_FILE.exists():
-        try:
-            return json.loads(SESSION_FILE.read_text())
-        except (json.JSONDecodeError, KeyError):
-            return None
-    return None
 
-def save_session(data):
-    SESSION_FILE.write_text(json.dumps(data, indent=4))
+def _load_all() -> dict:
+    if not SESSION_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SESSION_FILE.read_text())
+        # Migriere altes Format (einzelne Session ohne vmname-Key)
+        if data and "vmname" in data:
+            name = data["vmname"]
+            data = {name: data}
+            SESSION_FILE.write_text(json.dumps(data, indent=4))
+        return data
+    except (json.JSONDecodeError, KeyError):
+        return {}
 
-def get_or_create_session():
-    session = load_session()
 
-    if session:
-        return session, True
+def _save_all(sessions: dict):
+    SESSION_FILE.write_text(json.dumps(sessions, indent=4))
 
-    # --- ELSE: Neue Session abfragen ---
+
+def _select_session(sessions: dict) -> tuple[dict, bool]:
+    names = list(sessions.keys())
+
+    print("\n--- Sessions ---")
+    for i, name in enumerate(names):
+        s = sessions[name]
+        net = s.get("bridge_interface") or s.get("net_type", "default")
+        print(f"  [{i}] {name}  ({s['distro']}, {s['arch']}, {net})")
+    print("  [n] Neue VM erstellen")
+
+    choice = input("Auswahl [0]: ").strip().lower()
+
+    if choice == "n":
+        return _create_session(sessions)
+
+    try:
+        idx = int(choice) if choice else 0
+        return sessions[names[idx]], True
+    except (ValueError, IndexError):
+        print("Ungültige Auswahl, erste Session wird verwendet.")
+        return sessions[names[0]], True
+
+
+def _create_session(sessions: dict) -> tuple[dict, bool]:
     print("\n--- Neue VM-Parameter festlegen ---")
 
-    # Distribution
     distros = [
         ("debian", "13"),
         ("debian", "12"),
@@ -44,20 +69,20 @@ def get_or_create_session():
         distro_name, distro_version = "debian", "13"
     distro = f"{distro_name}/{distro_version}"
 
-    # Architektur
     print("Ziel-Architektur wählen:")
     print("  [0] amd64 (x86_64)")
     print("  [1] arm64 (aarch64)")
-    arch_choice = input("Auswahl [0]: ").strip() or "0"
-    arch = "arm64" if arch_choice == "1" else "amd64"
+    arch = "arm64" if (input("Auswahl [0]: ").strip() or "0") == "1" else "amd64"
 
-    # Defaults
     default_vmname = f"{distro_name}{distro_version.replace('.', '')}"
     vmname = input(f"Name der VM [{default_vmname}]: ").strip() or default_vmname
+
+    if vmname in sessions:
+        fail(f"Session '{vmname}' existiert bereits. Bitte anderen Namen wählen.")
+
     username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
     hostname = vmname
 
-    # Passwort & Hashing
     password = getpass.getpass("Passwort für User: ")
     progress("Erstelle Passwort-Hash...")
     try:
@@ -68,13 +93,10 @@ def get_or_create_session():
     except Exception:
         fail("mkpasswd fehlt. Installiere: sudo apt install whois")
 
-    # SSH-Key Auswahl
     ssh_dir = pathlib.Path.home() / ".ssh"
     pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
-
     if not pub_keys:
         fail("Keine .pub Keys in ~/.ssh gefunden!")
-
     if len(pub_keys) == 1:
         ssh_key_path = pub_keys[0]
         print(f"Einziger Key automatisch gewählt: {ssh_key_path.name}")
@@ -85,16 +107,11 @@ def get_or_create_session():
         sel = input("Key auswählen [0]: ").strip() or "0"
         ssh_key_path = pub_keys[int(sel)]
 
-    # Netzwerk-Auswahl
     net_type = "default"
     bridge_interface = None
 
     if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)", default=False):
-        result = subprocess.run(
-            ["ip", "-o", "link", "show"],
-            capture_output=True, text=True
-        )
-
+        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True)
         interfaces = []
         for line in result.stdout.splitlines():
             parts = line.split(": ")
@@ -126,8 +143,25 @@ def get_or_create_session():
         "ssh_key": str(ssh_key_path),
         "hashed_password": hashed_password,
         "net_type": net_type,
-        "bridge_interface": bridge_interface
+        "bridge_interface": bridge_interface,
     }
 
-    save_session(session_data)
+    sessions[vmname] = session_data
+    _save_all(sessions)
     return session_data, False
+
+
+def get_or_create_session() -> tuple[dict, bool]:
+    sessions = _load_all()
+
+    if not sessions:
+        return _create_session(sessions)
+
+    return _select_session(sessions)
+
+
+def delete_session(vmname: str):
+    sessions = _load_all()
+    if vmname in sessions:
+        del sessions[vmname]
+        _save_all(sessions)

@@ -12,7 +12,7 @@ from .cloud_init import (
     ensure_file_exists,
     validate_yaml,
 )
-from .session import get_or_create_session
+from .session import delete_session, get_or_create_session
 from .ui import ask_yes_no, fail, progress, success
 from .vm import (
     ISOS_PATH,
@@ -63,6 +63,7 @@ def main():
 
             if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
                 delete_vm(vmname, skip_confirm=True)
+                delete_session(vmname)
             else:
                 return
         except Exception:
