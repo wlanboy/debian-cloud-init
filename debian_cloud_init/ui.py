@@ -18,6 +18,20 @@ def fail(msg) -> NoReturn:
     sys.exit(1)
 
 
+def ask_int(question, default: int) -> int:
+    while True:
+        ans = input(f"{question} [{default}]: ").strip()
+        if not ans:
+            return default
+        try:
+            val = int(ans)
+            if val > 0:
+                return val
+            print("Bitte eine positive Zahl eingeben.")
+        except ValueError:
+            print("Bitte eine gültige Zahl eingeben.")
+
+
 def ask_yes_no(question, default=True):
     suffix = "[J/n]" if default else "[j/N]"
     while True:
