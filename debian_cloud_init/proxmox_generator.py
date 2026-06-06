@@ -16,7 +16,7 @@ from .proxmox import (
     print_ssh_command,
     ssh_run,
 )
-from .proxmox_session import get_or_create_session
+from .proxmox_session import delete_session, get_or_create_session
 from .ui import ask_yes_no, fail, progress, success
 
 
@@ -62,6 +62,7 @@ def main():
 
         if ask_yes_no(f"Soll VM {vmid} ({vmname}) gelöscht und neu erstellt werden?"):
             delete_vm(host, ssh_user, vmid, vmname, skip_confirm=True)
+            delete_session(vmname)
         else:
             return
 
@@ -93,8 +94,6 @@ def main():
 
     # Proxmox-spezifisch: qemu-guest-agent für IP-Erkennung via pvesh
     packages = cloud_config.get("packages", [])
-    if "qemu-guest-agent" not in packages:
-        packages.append("qemu-guest-agent")
     cloud_config["packages"] = packages
     cloud_config.setdefault("package_update", True)
 
