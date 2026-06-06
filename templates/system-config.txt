@@ -7,3 +7,4 @@ swapoff -a
 sed -i '/ swap / s/^/#/' /etc/fstab
 update-alternatives --set iptables /usr/sbin/iptables-legacy
 update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+systemctl enable qemu-guest-agent
