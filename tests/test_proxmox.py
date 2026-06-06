@@ -6,6 +6,7 @@ import pytest
 
 from debian_cloud_init.proxmox import (
     _extract_ip_from_interfaces,
+    create_vm,
     delete_vm,
     ensure_base_image,
     upload_snippets,
@@ -194,3 +195,95 @@ class TestUploadSnippets:
             upload_snippets("host", "root", "/var/lib/vz/snippets", "testvm", cloud_init_yml)
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "mkdir" in calls
+
+
+# =============================================================================
+# create_vm
+# =============================================================================
+
+
+def _make_ssh_result(returncode=0, stdout=""):
+    m = MagicMock()
+    m.returncode = returncode
+    m.stdout = stdout
+    return m
+
+
+def _ssh_config_side_effect(*args, **kwargs):
+    cmd = args[2]
+    if "qm config" in cmd:
+        return _make_ssh_result(stdout="unused0: local-lvm:vm-100-disk-0\n")
+    return _make_ssh_result()
+
+
+def _create_vm_call(tmp_path, ask_yes_no_side_effect, ask_int_side_effect=None):
+    cloud_init_yml = tmp_path / "cloud-init.yml"
+    cloud_init_yml.write_text("#cloud-config\n{}")
+    int_patch = patch("debian_cloud_init.proxmox.ask_int", side_effect=ask_int_side_effect or [])
+    with patch("debian_cloud_init.proxmox.upload_snippets"), \
+         patch("debian_cloud_init.proxmox.ensure_base_image", return_value="/images/debian.qcow2"), \
+         patch("debian_cloud_init.proxmox.ask_yes_no", side_effect=ask_yes_no_side_effect), \
+         patch("debian_cloud_init.proxmox.ssh_run", side_effect=_ssh_config_side_effect) as mock_ssh, \
+         int_patch:
+        create_vm("host", "root", "pve", 100, "testvm", "amd64", "debian/13",
+                  "local-lvm", "vmbr0", "/var/lib/vz/snippets", cloud_init_yml)
+    return mock_ssh
+
+
+class TestCreateVm:
+    def test_skipped_when_user_declines(self, tmp_path):
+        cloud_init_yml = tmp_path / "cloud-init.yml"
+        cloud_init_yml.write_text("#cloud-config\n{}")
+        with patch("debian_cloud_init.proxmox.upload_snippets"), \
+             patch("debian_cloud_init.proxmox.ensure_base_image", return_value="/images/debian.qcow2"), \
+             patch("debian_cloud_init.proxmox.ask_yes_no", return_value=False), \
+             patch("debian_cloud_init.proxmox.ssh_run") as mock_ssh:
+            create_vm("host", "root", "pve", 100, "testvm", "amd64", "debian/13",
+                      "local-lvm", "vmbr0", "/var/lib/vz/snippets", cloud_init_yml)
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "qm create" not in calls
+
+    def test_default_size_uses_4096_memory(self, tmp_path):
+        # ask_yes_no: [create VM=True, use defaults=True]
+        mock_ssh = _create_vm_call(tmp_path, ask_yes_no_side_effect=[True, True])
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "--memory 4096" in calls
+
+    def test_default_size_uses_2_cores(self, tmp_path):
+        mock_ssh = _create_vm_call(tmp_path, ask_yes_no_side_effect=[True, True])
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "--cores 2" in calls
+
+    def test_default_size_resizes_to_30g(self, tmp_path):
+        mock_ssh = _create_vm_call(tmp_path, ask_yes_no_side_effect=[True, True])
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "30G" in calls
+
+    def test_custom_size_uses_provided_memory(self, tmp_path):
+        # ask_yes_no: [create VM=True, use defaults=False]
+        # ask_int: [cores=4, memory=8192, disk=50]
+        mock_ssh = _create_vm_call(
+            tmp_path,
+            ask_yes_no_side_effect=[True, False],
+            ask_int_side_effect=[4, 8192, 50],
+        )
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "--memory 8192" in calls
+
+    def test_custom_size_uses_provided_cores(self, tmp_path):
+        mock_ssh = _create_vm_call(
+            tmp_path,
+            ask_yes_no_side_effect=[True, False],
+            ask_int_side_effect=[4, 8192, 50],
+        )
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "--cores 4" in calls
+
+    def test_custom_size_resizes_to_provided_disk(self, tmp_path):
+        mock_ssh = _create_vm_call(
+            tmp_path,
+            ask_yes_no_side_effect=[True, False],
+            ask_int_side_effect=[4, 8192, 50],
+        )
+        calls = " ".join(str(c) for c in mock_ssh.call_args_list)
+        assert "50G" in calls

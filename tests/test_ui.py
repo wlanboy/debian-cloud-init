@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from debian_cloud_init.ui import ask_yes_no, fail, run_cmd
+from debian_cloud_init.ui import ask_int, ask_yes_no, fail, run_cmd
 
 
 # =============================================================================
@@ -17,6 +17,41 @@ class TestFail:
         with pytest.raises(SystemExit) as exc_info:
             fail("something went wrong")
         assert exc_info.value.code != 0
+
+
+# =============================================================================
+# ask_int
+# =============================================================================
+
+
+class TestAskInt:
+    def test_empty_input_returns_default(self):
+        with patch("builtins.input", return_value=""):
+            assert ask_int("Cores?", 2) == 2
+
+    def test_valid_integer_returned(self):
+        with patch("builtins.input", return_value="4"):
+            assert ask_int("Cores?", 2) == 4
+
+    def test_zero_rejected_then_valid(self):
+        with patch("builtins.input", side_effect=["0", "4"]):
+            assert ask_int("Cores?", 2) == 4
+
+    def test_negative_rejected_then_valid(self):
+        with patch("builtins.input", side_effect=["-1", "8"]):
+            assert ask_int("RAM?", 4096) == 8
+
+    def test_non_numeric_rejected_then_valid(self):
+        with patch("builtins.input", side_effect=["abc", "16"]):
+            assert ask_int("Disk?", 30) == 16
+
+    def test_whitespace_around_number_accepted(self):
+        with patch("builtins.input", return_value="  8  "):
+            assert ask_int("Cores?", 2) == 8
+
+    def test_large_value_accepted(self):
+        with patch("builtins.input", return_value="131072"):
+            assert ask_int("RAM?", 4096) == 131072
 
 
 # =============================================================================

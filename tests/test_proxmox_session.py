@@ -401,3 +401,81 @@ class TestImportSession:
             proxmox_session._import_session({})
         data = json.loads(session_file.read_text())
         assert "imported-vm" in data
+
+
+# =============================================================================
+# _sync_sessions
+# =============================================================================
+
+
+def _ssh_ok():
+    m = MagicMock()
+    m.returncode = 0
+    m.stdout = "status: stopped"
+    return m
+
+
+def _ssh_missing():
+    m = MagicMock()
+    m.returncode = 1
+    m.stdout = ""
+    return m
+
+
+class TestSyncSessions:
+    def test_all_found_returns_sessions_unchanged(self):
+        sessions = {"vm1": _full_session("vm1"), "vm2": _full_session("vm2")}
+        with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_ok()):
+            result = proxmox_session._sync_sessions(sessions)
+        assert "vm1" in result
+        assert "vm2" in result
+
+    def test_all_missing_user_confirms_returns_empty(self, tmp_path):
+        sessions = {"vm1": _full_session("vm1"), "vm2": _full_session("vm2")}
+        session_file = tmp_path / ".proxmox-session"
+        session_file.write_text(json.dumps(sessions))
+        with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_missing()), \
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=True), \
+             patch.object(proxmox_session, "SESSION_FILE", session_file):
+            result = proxmox_session._sync_sessions(sessions)
+        assert result == {}
+
+    def test_all_missing_user_declines_sessions_unchanged(self, tmp_path):
+        sessions = {"vm1": _full_session("vm1"), "vm2": _full_session("vm2")}
+        session_file = tmp_path / ".proxmox-session"
+        session_file.write_text(json.dumps(sessions))
+        with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_missing()), \
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             patch.object(proxmox_session, "SESSION_FILE", session_file):
+            result = proxmox_session._sync_sessions(sessions)
+        assert "vm1" in result
+        assert "vm2" in result
+
+    def test_partial_missing_only_missing_removed(self, tmp_path):
+        sessions = {"existing": _full_session("existing"), "gone": _full_session("gone")}
+        session_file = tmp_path / ".proxmox-session"
+        session_file.write_text(json.dumps(sessions))
+        with patch("debian_cloud_init.proxmox.ssh_run",
+                   side_effect=[_ssh_ok(), _ssh_missing()]), \
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=True), \
+             patch.object(proxmox_session, "SESSION_FILE", session_file):
+            result = proxmox_session._sync_sessions(sessions)
+        assert "existing" in result
+        assert "gone" not in result
+
+    def test_deleted_sessions_removed_from_file(self, tmp_path):
+        sessions = {"vm1": _full_session("vm1")}
+        session_file = tmp_path / ".proxmox-session"
+        session_file.write_text(json.dumps(sessions))
+        with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_missing()), \
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=True), \
+             patch.object(proxmox_session, "SESSION_FILE", session_file):
+            proxmox_session._sync_sessions(sessions)
+        data = json.loads(session_file.read_text())
+        assert "vm1" not in data
+
+    def test_empty_sessions_returns_empty(self):
+        with patch("debian_cloud_init.proxmox.ssh_run") as mock_ssh:
+            result = proxmox_session._sync_sessions({})
+        mock_ssh.assert_not_called()
+        assert result == {}
