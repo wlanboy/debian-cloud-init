@@ -113,15 +113,17 @@ class TestGetOrCreateSessionExisting:
         }
         session_file = tmp_path / ".session"
         session_file.write_text(json.dumps(existing))
-        with patch("debian_cloud_init.session.SESSION_FILE", session_file):
+        with patch("debian_cloud_init.session.SESSION_FILE", session_file), \
+             patch("builtins.input", return_value=""):
             session, is_persistent = get_or_create_session()
         assert is_persistent is True
         assert session["vmname"] == "existing-vm"
 
     def test_existing_session_flag_is_true(self, tmp_path):
         session_file = tmp_path / ".session"
-        session_file.write_text(json.dumps({"vmname": "vm", "arch": "amd64"}))
-        with patch("debian_cloud_init.session.SESSION_FILE", session_file):
+        session_file.write_text(json.dumps({"vmname": "vm", "arch": "amd64", "distro": "debian/13"}))
+        with patch("debian_cloud_init.session.SESSION_FILE", session_file), \
+             patch("builtins.input", return_value=""):
             _, is_persistent = get_or_create_session()
         assert is_persistent is True
 
@@ -129,7 +131,8 @@ class TestGetOrCreateSessionExisting:
         data = {"vmname": "untouched", "distro": "ubuntu/24.04", "arch": "arm64"}
         session_file = tmp_path / ".session"
         session_file.write_text(json.dumps(data))
-        with patch("debian_cloud_init.session.SESSION_FILE", session_file):
+        with patch("debian_cloud_init.session.SESSION_FILE", session_file), \
+             patch("builtins.input", return_value=""):
             session, _ = get_or_create_session()
         assert session["distro"] == "ubuntu/24.04"
         assert session["arch"] == "arm64"
@@ -187,8 +190,9 @@ class TestGetOrCreateSessionNew:
             get_or_create_session()
         assert session_file.exists()
         data = json.loads(session_file.read_text())
-        assert "vmname" in data
-        assert "distro" in data
+        session = next(iter(data.values()))
+        assert "vmname" in session
+        assert "distro" in session
 
     def test_password_hash_stored_in_session(self, tmp_path):
         session_file = tmp_path / ".session"
