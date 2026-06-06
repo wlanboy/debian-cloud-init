@@ -2,3 +2,4 @@ __pycache__/
 cloud-init.yml
 .session
 vm_setup.cast
+.proxmox-session
