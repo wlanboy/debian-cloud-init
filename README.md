@@ -61,9 +61,9 @@ uv tool install --force dist/debian_cloud_init-0.1.0-py3-none-any.whl
 
 ### run without installing
 ```bash
-uv run generator.py
+uv run debian-cloud-init
 # or
-python3 -m debian_cloud_init.generator
+uv run python -m debian_cloud_init.generator
 ```
 
 ### supported distributions and architectures
