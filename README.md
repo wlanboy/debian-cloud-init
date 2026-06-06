@@ -1,5 +1,5 @@
-# debian/ubuntu kvm virsh install with cloud init
-This repo describes how to auto install Debian 12, Debian 13, Ubuntu 22.04 and Ubuntu 24.04 with virsh-install and cloud-init.
+# debian/ubuntu cloud init installer
+This repo describes how to auto install Debian 12, Debian 13, Ubuntu 22.04 and Ubuntu 24.04 with cloud-init — on a local KVM/libvirt host or a **remote Proxmox server**.
 Which images you can use, and which images you should not use.
 How to add user passwords with hashes and how to create harddisk images from templates.
 
@@ -80,6 +80,93 @@ The `templates/` directory contains files that are merged into the generated `cl
 - `package-config.txt` – list of runcmd lines to execute (one per line)
 - `system-config.txt` – shell script injected as a runcmd block
 - `amd64-tools.sh` – additional tooling script (downloaded automatically if missing)
+
+---
+
+## Proxmox (remote server)
+
+The Proxmox backend runs all operations remotely via SSH — the cloud image is downloaded directly on the Proxmox host, and cloud-init snippets are uploaded via SCP. No large file transfers to your local machine.
+
+### prerequisites
+
+**On your local machine:**
+- SSH key-based access to the Proxmox host must be set up:
+  ```bash
+  ssh-copy-id root@<proxmox-host>
+  ```
+- `mkpasswd` must be installed:
+  ```bash
+  sudo apt-get install whois
+  ```
+
+**On the Proxmox host:**
+- The `local` storage must have the **Snippets** content type enabled:
+  Datacenter → Storage → local → Edit → check **Snippets**
+- `qemu-guest-agent` should be installed in the VM template or via cloud-init `packages` so that IP detection works after boot.
+
+### run
+
+```bash
+uv run debian-cloud-init-proxmox
+# or after installing as wheel:
+debian-cloud-init-proxmox
+```
+
+The first run asks for all parameters interactively and saves them to `.proxmox-session`:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| Proxmox Host | — | IP or hostname of the Proxmox server |
+| SSH User | `root` | SSH user on Proxmox |
+| Node Name | `pve` | Proxmox node name |
+| VM ID | — | Numeric VM ID (e.g. `100`) |
+| Storage Pool | `local-lvm` | Storage pool for disk and cloud-init drive |
+| Snippets Path | `/var/lib/vz/snippets` | Path for cloud-init snippet files on Proxmox |
+| Network Bridge | `vmbr0` | Bridge interface for the VM network |
+| Distro / Arch | `debian/13`, `amd64` | Same options as KVM backend |
+| VM Name, User, Password, SSH Key | — | Same as KVM backend |
+
+Subsequent runs detect the existing VM and offer to show the IP or recreate it.
+
+### what happens on each run
+
+1. `cloud-init.yml` is generated locally from the `templates/` directory
+2. `user-data` and `meta-data` are uploaded via SCP to the snippets directory on Proxmox
+3. The cloud image is downloaded directly on the Proxmox host (into `/var/lib/vz/template/iso/`) if not already present
+4. `qm create` → `qm importdisk` → disk attached as `scsi0` → resized to 30 GB
+5. Cloud-init drive (`ide2`) added, `--cicustom` pointed at the uploaded snippets
+6. VM is started; IP is retrieved via `pvesh` + qemu-guest-agent
+
+### install as wheel
+
+```bash
+uv build
+uv tool install dist/debian_cloud_init-0.1.0-py3-none-any.whl
+debian-cloud-init-proxmox
+```
+
+### manual Proxmox commands (reference)
+
+```bash
+# import a cloud image manually
+qm create 100 --name debian13 --memory 4096 --cores 2 --net0 virtio,bridge=vmbr0
+qm importdisk 100 /var/lib/vz/template/iso/debian-13-generic-amd64.qcow2 local-lvm --format qcow2
+qm set 100 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-100-disk-0
+qm set 100 --ide2 local-lvm:cloudinit
+qm set 100 --cicustom "user=local:snippets/myvm-user-data.yml,meta=local:snippets/myvm-meta-data.yml"
+qm set 100 --boot order=scsi0
+qm resize 100 scsi0 30G
+qm start 100
+
+# delete a vm
+qm stop 100
+qm destroy 100 --destroy-unreferenced-disks 1 --purge 1
+
+# get IP via guest agent
+pvesh get /nodes/pve/qemu/100/agent/network-get-interfaces --output-format json
+```
+
+---
 
 ## create cloud init without tool
 ```bash
