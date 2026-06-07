@@ -1,7 +1,21 @@
 # debian/ubuntu cloud init installer
-This repo describes how to auto install Debian 12, Debian 13, Ubuntu 22.04 and Ubuntu 24.04 with cloud-init — on a local KVM/libvirt host or a **remote Proxmox server**.
-Which images you can use, and which images you should not use.
-How to add user passwords with hashes and how to create harddisk images from templates.
+
+This repository provides a complete workflow for automated installation of Debian 12/13 and Ubuntu 22.04/24.04 using cloud-init.
+It supports both local KVM/libvirt environments and remote Proxmox servers, making it ideal for homelabs, DevOps automation, and reproducible VM provisioning.
+
+It explains which cloud images work reliably, which ones should be avoided, and how to configure users, SSH keys, and password hashes.
+The project also demonstrates how to generate custom disk images from templates for fast and consistent VM deployment.
+
+A key component is the Python-based TUI, which guides you step-by-step through:
+
+- Selecting the distribution
+- Choosing the correct cloud image
+- Adding SSH keys and password hashes
+- Generating cloud-init configuration
+- Creating QCOW2 disk images
+- Deploying to KVM/libvirt or Proxmox
+
+This makes cloud-init–based VM provisioning accessible even for users without prior experience.
 
 ## screen recordings of tool
 ![Create VM](./vm_setup.gif)
