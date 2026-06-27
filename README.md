@@ -80,6 +80,54 @@ uv run debian-cloud-init
 uv run python -m debian_cloud_init.generator
 ```
 
+### oneline mode
+Fragt alle Parameter interaktiv ab und gibt am Ende den fertigen Einzeiler-Befehl aus — inklusive gehashtem Passwort. Den Befehl kannst du dann direkt kopieren und ausführen.
+
+```bash
+uv run python -m debian_cloud_init.generator --oneline
+```
+
+Beispiel-Ausgabe:
+```
+uv run python -m debian_cloud_init.generator --vmname=debian13 --username=wlanboy --distro=debian/13 --arch=amd64 --ssh-key=/home/user/.ssh/id_rsa.pub --hashed-password='$6$...' --net-type=default
+```
+
+### alle parameter direkt übergeben
+Wenn alle Pflicht-Parameter als Flags übergeben werden, wird die Session übersprungen und die VM direkt erstellt:
+
+```bash
+uv run python -m debian_cloud_init.generator \
+  --vmname=debian13 \
+  --username=wlanboy \
+  --distro=debian/13 \
+  --arch=amd64 \
+  --ssh-key=~/.ssh/id_rsa.pub \
+  --hashed-password='$6$...' \
+  --net-type=default
+
+# mit Bridge-Netzwerk:
+uv run python -m debian_cloud_init.generator \
+  --vmname=debian13 \
+  --username=wlanboy \
+  --distro=debian/13 \
+  --arch=amd64 \
+  --ssh-key=~/.ssh/id_rsa.pub \
+  --hashed-password='$6$...' \
+  --net-type=bridge \
+  --bridge-interface=eth0
+```
+
+| Parameter | Werte | Beschreibung |
+|-----------|-------|-------------|
+| `--vmname` | beliebig | Name der VM |
+| `--username` | beliebig | Benutzername in der VM |
+| `--distro` | `debian/13`, `debian/12`, `ubuntu/24.04`, `ubuntu/22.04` | Distro und Version |
+| `--arch` | `amd64`, `arm64` | Ziel-Architektur |
+| `--ssh-key` | Pfad | Pfad zum öffentlichen SSH-Key (`.pub`) |
+| `--hashed-password` | SHA-512-Hash | Hash via `mkpasswd -m sha-512` |
+| `--net-type` | `default`, `bridge` | Netzwerktyp (NAT oder Bridge) |
+| `--bridge-interface` | z.B. `eth0` | Bridge-Interface (nur bei `--net-type=bridge`) |
+
 ### supported distributions and architectures
 | Distro | Version | amd64 | arm64 |
 |--------|---------|-------|-------|

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
+import getpass
 import pathlib
+import shlex
 import subprocess
+import sys
 
 import yaml
 
@@ -26,7 +30,155 @@ from .vm import (
 )
 
 
+def _oneline_wizard():
+    """Fragt alle VM-Parameter interaktiv ab und gibt den fertigen Einzeiler-Befehl aus."""
+    print("=== Oneline-Modus: Parameter sammeln ===")
+    print("Am Ende wird der vollständige Befehl ausgegeben.\n")
+
+    distros = [
+        ("debian", "13"),
+        ("debian", "12"),
+        ("ubuntu", "24.04"),
+        ("ubuntu", "22.04"),
+    ]
+    print("Betriebssystem wählen:")
+    for i, (name, version) in enumerate(distros):
+        print(f"  [{i}] {name.capitalize()} {version}")
+    distro_choice = input("Auswahl [0]: ").strip() or "0"
+    try:
+        distro_name, distro_version = distros[int(distro_choice)]
+    except (ValueError, IndexError):
+        distro_name, distro_version = "debian", "13"
+    distro = f"{distro_name}/{distro_version}"
+
+    print("\nZiel-Architektur wählen:")
+    print("  [0] amd64 (x86_64)")
+    print("  [1] arm64 (aarch64)")
+    arch = "arm64" if (input("Auswahl [0]: ").strip() or "0") == "1" else "amd64"
+
+    default_vmname = f"{distro_name}{distro_version.replace('.', '')}"
+    vmname = input(f"\nName der VM [{default_vmname}]: ").strip() or default_vmname
+
+    username = input("Benutzername [wlanboy]: ").strip() or "wlanboy"
+
+    password = getpass.getpass("Passwort für User: ")
+    print("Erstelle Passwort-Hash...")
+    try:
+        hashed_password = subprocess.run(
+            ["mkpasswd", "-m", "sha-512", password],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except FileNotFoundError:
+        print("❌ mkpasswd fehlt. Installiere: sudo apt install whois")
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Fehler beim Hashen des Passworts: {e}")
+        sys.exit(1)
+
+    ssh_dir = pathlib.Path.home() / ".ssh"
+    pub_keys = sorted([f for f in ssh_dir.glob("*.pub") if f.is_file()])
+    if not pub_keys:
+        print("❌ Keine .pub Keys in ~/.ssh gefunden!")
+        sys.exit(1)
+    if len(pub_keys) == 1:
+        ssh_key_path = pub_keys[0]
+        print(f"Einziger SSH-Key automatisch gewählt: {ssh_key_path.name}")
+    else:
+        print("\nVerfügbare SSH-Keys:")
+        for i, key in enumerate(pub_keys):
+            print(f"  [{i}] {key.name}")
+        sel = input("Key auswählen [0]: ").strip() or "0"
+        try:
+            ssh_key_path = pub_keys[int(sel)]
+        except (ValueError, IndexError):
+            ssh_key_path = pub_keys[0]
+
+    net_type = "default"
+    bridge_interface = None
+
+    ans = input("\nBridge-Netzwerk verwenden? (Nein = Default NAT) [j/N]: ").strip().lower()
+    if ans in ("j", "y", "ja", "yes"):
+        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True)
+        interfaces = []
+        for line in result.stdout.splitlines():
+            parts = line.split(": ")
+            if len(parts) >= 2:
+                iface = parts[1].split("@")[0]
+                if iface not in ("lo",) and not iface.startswith(("virbr", "docker", "br-", "veth")):
+                    interfaces.append(iface)
+
+        if not interfaces:
+            print("⚠ Keine physischen Interfaces gefunden. Verwende NAT.")
+        else:
+            print("\nVerfügbare Netzwerk-Interfaces:")
+            for i, iface in enumerate(interfaces):
+                print(f"  [{i}] {iface}")
+            sel = input("Interface auswählen [0]: ").strip() or "0"
+            try:
+                bridge_interface = interfaces[int(sel)]
+                net_type = "bridge"
+            except (ValueError, IndexError):
+                print("⚠ Ungültige Auswahl. Verwende NAT.")
+
+    cmd_parts = [
+        "uv", "run", "python", "-m", "debian_cloud_init.generator",
+        f"--vmname={vmname}",
+        f"--username={username}",
+        f"--distro={distro}",
+        f"--arch={arch}",
+        f"--ssh-key={ssh_key_path}",
+        f"--hashed-password={hashed_password}",
+        f"--net-type={net_type}",
+    ]
+    if bridge_interface:
+        cmd_parts.append(f"--bridge-interface={bridge_interface}")
+
+    print("\n=== Einzeiler-Befehl ===")
+    print(shlex.join(cmd_parts))
+    print("=======================\n")
+
+
+def _session_from_args(args) -> dict:
+    return {
+        "vmname": args.vmname,
+        "hostname": args.vmname,
+        "username": args.username,
+        "distro": args.distro,
+        "arch": args.arch,
+        "ssh_key": args.ssh_key,
+        "hashed_password": args.hashed_password,
+        "net_type": args.net_type,
+        "bridge_interface": args.bridge_interface,
+    }
+
+
+def _all_args_provided(args) -> bool:
+    required = [args.vmname, args.username, args.distro, args.arch,
+                args.ssh_key, args.hashed_password, args.net_type]
+    return all(v is not None for v in required)
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Debian/Ubuntu Cloud-Init VM erstellen")
+    parser.add_argument("--oneline", action="store_true",
+                        help="Interaktiver Wizard, der den fertigen Einzeiler-Befehl ausgibt")
+    parser.add_argument("--vmname", help="Name der VM")
+    parser.add_argument("--username", help="Benutzername in der VM")
+    parser.add_argument("--distro", help="Distro und Version, z.B. debian/13 oder ubuntu/24.04")
+    parser.add_argument("--arch", choices=["amd64", "arm64"], help="Ziel-Architektur")
+    parser.add_argument("--ssh-key", dest="ssh_key", help="Pfad zum öffentlichen SSH-Key")
+    parser.add_argument("--hashed-password", dest="hashed_password",
+                        help="Bereits gehashtes Passwort (SHA-512, z.B. via mkpasswd)")
+    parser.add_argument("--net-type", dest="net_type", choices=["default", "bridge"],
+                        help="Netzwerktyp: default (NAT) oder bridge")
+    parser.add_argument("--bridge-interface", dest="bridge_interface",
+                        help="Bridge-Interface-Name (nur bei --net-type=bridge)")
+    args = parser.parse_args()
+
+    if args.oneline:
+        _oneline_wizard()
+        return
+
     templates_dir = pathlib.Path("templates")
 
     template_file = templates_dir / "cloud-init-template.yml"
@@ -38,7 +190,11 @@ def main():
     # -------------------------------------------------------------------------
     # SESSION LADEN ODER NEUE PARAMETER ABFRAGEN
     # -------------------------------------------------------------------------
-    session, is_persistent = get_or_create_session()
+    if _all_args_provided(args):
+        session = _session_from_args(args)
+        is_persistent = False
+    else:
+        session, is_persistent = get_or_create_session()
 
     vmname = session["vmname"]
     username = session["username"]
