@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import time
@@ -47,6 +48,12 @@ def ask_yes_no(question, default=True):
 
 def run_cmd(cmd):
     print(f"→ {cmd}")
-    result = subprocess.run(cmd, shell=True)
+    env = os.environ.copy()
+    venv = env.get("VIRTUAL_ENV", "")
+    if venv:
+        venv_bin = venv + "/bin"
+        env["PATH"] = ":".join(p for p in env["PATH"].split(":") if p != venv_bin)
+        env.pop("VIRTUAL_ENV", None)
+    result = subprocess.run(cmd, shell=True, env=env)
     if result.returncode != 0:
         fail("Fehler beim Ausführen des Befehls.")
