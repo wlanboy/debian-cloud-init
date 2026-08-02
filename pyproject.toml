@@ -31,3 +31,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+extend-exclude = ["old-version"]
