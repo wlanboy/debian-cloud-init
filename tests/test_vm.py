@@ -14,7 +14,6 @@ from debian_cloud_init.vm import (
     ensure_overlay_image,
 )
 
-
 # =============================================================================
 # _os_variant
 # =============================================================================
@@ -130,9 +129,9 @@ class TestEnsureIsosFolder:
         with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
              patch("debian_cloud_init.vm.os.getuid", return_value=1000), \
              patch("debian_cloud_init.vm.grp.getgrnam", return_value=MagicMock(gr_gid=2000)), \
-             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                ensure_isos_folder()
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            ensure_isos_folder()
 
     def test_not_exists_user_confirms_creates_folder(self):
         mock_path = self._mock_path(exists=False)
@@ -146,9 +145,9 @@ class TestEnsureIsosFolder:
     def test_not_exists_user_declines_exits(self):
         mock_path = self._mock_path(exists=False)
         with patch("debian_cloud_init.vm.ISOS_PATH", mock_path), \
-             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                ensure_isos_folder()
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            ensure_isos_folder()
 
 
 # =============================================================================
@@ -173,9 +172,9 @@ class TestEnsureBaseImage:
 
     def test_image_missing_user_declines_exits(self, tmp_path):
         with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
-             patch("debian_cloud_init.vm.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                ensure_base_image("amd64", "debian/13")
+             patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            ensure_base_image("amd64", "debian/13")
 
     def test_ubuntu_image_name_in_wget_call(self, tmp_path):
         with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
@@ -201,9 +200,9 @@ class TestEnsureBaseImage:
 
 class TestEnsureOverlayImage:
     def test_no_overlay_no_base_exits(self, tmp_path):
-        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path):
-            with pytest.raises(SystemExit):
-                ensure_overlay_image("myvm", "amd64", "debian/13")
+        with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \
+             pytest.raises(SystemExit):
+            ensure_overlay_image("myvm", "amd64", "debian/13")
 
     def test_base_exists_creates_overlay_via_qemu_img(self, tmp_path):
         (tmp_path / "debian-13-generic-amd64.qcow2").write_text("fake base")
@@ -306,9 +305,8 @@ class TestDeleteVm:
     def test_vm_exists_user_declines_exits(self):
         with patch("subprocess.run", return_value=MagicMock(returncode=0)), \
              patch("debian_cloud_init.vm.ask_yes_no", return_value=False), \
-             patch("debian_cloud_init.vm.time.sleep"):
-            with pytest.raises(SystemExit):
-                delete_vm("myvm")
+             patch("debian_cloud_init.vm.time.sleep"), pytest.raises(SystemExit):
+            delete_vm("myvm")
 
     def test_vm_exists_user_confirms_calls_undefine(self, tmp_path):
         with patch("debian_cloud_init.vm.ISOS_PATH", tmp_path), \

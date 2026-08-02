@@ -12,7 +12,6 @@ from debian_cloud_init.proxmox import (
     upload_snippets,
 )
 
-
 # =============================================================================
 # _extract_ip_from_interfaces
 # =============================================================================
@@ -98,9 +97,9 @@ class TestDeleteVm:
 
     def test_vm_exists_user_declines_exits(self):
         with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_result()), \
-             patch("debian_cloud_init.proxmox.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                delete_vm("host", "root", 100, "testvm")
+             patch("debian_cloud_init.proxmox.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            delete_vm("host", "root", 100, "testvm")
 
     def test_vmid_included_in_destroy_call(self):
         with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_result()) as mock_ssh:
@@ -138,9 +137,9 @@ class TestEnsureBaseImage:
 
     def test_image_missing_user_declines_exits(self):
         with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_result(returncode=1)), \
-             patch("debian_cloud_init.proxmox.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                ensure_base_image("host", "root", "amd64", "debian/13")
+             patch("debian_cloud_init.proxmox.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            ensure_base_image("host", "root", "amd64", "debian/13")
 
     def test_ubuntu_image_name_in_returned_path(self):
         with patch("debian_cloud_init.proxmox.ssh_run", return_value=_ssh_result(returncode=0)):

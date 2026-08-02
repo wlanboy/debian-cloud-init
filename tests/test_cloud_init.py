@@ -14,7 +14,6 @@ from debian_cloud_init.cloud_init import (
     validate_yaml,
 )
 
-
 # =============================================================================
 # LiteralString / YAML Representer
 # =============================================================================
@@ -48,9 +47,9 @@ class TestEnsureFileExists:
         assert ensure_file_exists(tmp_path / "missing.txt") is False
 
     def test_missing_file_with_url_user_declines_exits(self, tmp_path):
-        with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
+        with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
 
     def test_missing_file_with_url_download_succeeds(self, tmp_path):
         f = tmp_path / "downloaded.txt"
@@ -64,9 +63,9 @@ class TestEnsureFileExists:
 
     def test_missing_file_with_url_download_fails_exits(self, tmp_path):
         with patch("debian_cloud_init.cloud_init.ask_yes_no", return_value=True), \
-             patch("urllib.request.urlretrieve", side_effect=OSError("network error")):
-            with pytest.raises(SystemExit):
-                ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
+             patch("urllib.request.urlretrieve", side_effect=OSError("network error")), \
+             pytest.raises(SystemExit):
+            ensure_file_exists(tmp_path / "missing.txt", download_url="https://example.com/file")
 
 
 # =============================================================================

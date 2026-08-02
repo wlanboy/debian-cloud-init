@@ -73,7 +73,7 @@ def main():
 
     try:
         cloud_config = yaml.safe_load(template_file.read_text()) or {}
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         fail(f"Fehler beim Laden des Templates: {e}")
 
     # Proxmox-spezifisch: qemu-guest-agent für IP-Erkennung via pvesh
@@ -102,7 +102,7 @@ def main():
     try:
         yaml_body = yaml.dump(cloud_config, sort_keys=False, Dumper=yaml.SafeDumper)
         output_file.write_text("#cloud-config\n" + yaml_body)
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         fail(f"Fehler beim Schreiben der cloud-init.yml: {e}")
 
     progress("Validiere YAML…")
@@ -112,12 +112,11 @@ def main():
     if is_persistent:
         print(f"Session geladen: {vmname} (ID {vmid}) auf {host} ({distro}, {arch})")
         result = ssh_run(host, ssh_user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
-        if "running" in result.stdout:
-            if ask_yes_no(f"VM {vmid} läuft. IP anzeigen?"):
-                ip = get_vm_ip(host, ssh_user, node, vmid)
-                if ip:
-                    print_ssh_command(username, ip)
-                return
+        if "running" in result.stdout and ask_yes_no(f"VM {vmid} läuft. IP anzeigen?"):
+            ip = get_vm_ip(host, ssh_user, node, vmid)
+            if ip:
+                print_ssh_command(username, ip)
+            return
 
         if ask_yes_no(f"Soll VM {vmid} ({vmname}) gelöscht und neu erstellt werden?"):
             delete_vm(host, ssh_user, vmid, vmname, skip_confirm=True)

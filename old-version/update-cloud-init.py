@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-import yaml
-import subprocess
 import getpass
 import pathlib
+import subprocess
 import sys
+
+import yaml
+
 
 def main():
     # 1. Get the path to the cloud-init.yml file with a default value

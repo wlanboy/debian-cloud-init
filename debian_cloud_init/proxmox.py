@@ -7,7 +7,6 @@ from typing import Literal, overload
 
 from .ui import ask_int, ask_yes_no, fail, progress, success
 
-
 # =============================================================================
 # SSH / SCP Hilfsfunktionen
 # =============================================================================
@@ -22,12 +21,12 @@ def ssh_run(host: str, user: str, cmd: str, *, check: bool = ..., capture: Liter
 def ssh_run(host: str, user: str, cmd: str, *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
     full_cmd = ["ssh"] + _SSH_OPTS + [f"{user}@{host}", cmd]
     if capture:
-        result = subprocess.run(full_cmd, capture_output=True, text=True)
+        result = subprocess.run(full_cmd, capture_output=True, text=True, check=False)
         if check and result.returncode != 0:
             fail(f"SSH-Fehler ({host}): {result.stderr.strip() or result.stdout.strip()}")
         return result
     else:
-        result = subprocess.run(full_cmd)
+        result = subprocess.run(full_cmd, check=False)
         if check and result.returncode != 0:
             fail(f"SSH-Fehler ({host}): Befehl fehlgeschlagen.")
         return result
@@ -35,7 +34,7 @@ def ssh_run(host: str, user: str, cmd: str, *, check: bool = True, capture: bool
 
 def scp_to(host: str, user: str, local_path: pathlib.Path, remote_path: str):
     cmd = ["scp"] + _SSH_OPTS + [str(local_path), f"{user}@{host}:{remote_path}"]
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         fail(f"SCP fehlgeschlagen: {local_path.name} → {remote_path}")
 

@@ -1,11 +1,10 @@
+import grp
 import os
 import pathlib
 import shutil
 import subprocess
 import tempfile
 import time
-
-import grp
 
 from .ui import ask_yes_no, fail, progress, run_cmd, success
 
@@ -114,9 +113,9 @@ def delete_vm(vmname, skip_confirm=False):
     result = subprocess.run(
         f"virsh list --all | grep -w {vmname}",
         shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
+        check=False,
     )
 
     if result.returncode != 0:
@@ -128,7 +127,7 @@ def delete_vm(vmname, skip_confirm=False):
         fail("Abbruch.")
 
     progress("Stoppe VM…")
-    subprocess.run(f"virsh destroy {vmname}", shell=True)
+    subprocess.run(f"virsh destroy {vmname}", shell=True, check=False)
 
     progress("Lösche VM…")
     run_cmd(f"virsh undefine {vmname} --remove-all-storage --nvram")
@@ -252,9 +251,9 @@ def get_vm_ip(vmname):
         state = subprocess.run(
             f"virsh domstate {vmname}",
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
+            check=False,
         ).stdout.strip()
 
         if "running" in state.lower():
@@ -269,9 +268,9 @@ def get_vm_ip(vmname):
         result = subprocess.run(
             f"virsh domifaddr {vmname} --source agent",
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0 and "ipv4" in result.stdout.lower():
             for line in result.stdout.splitlines():
@@ -283,9 +282,9 @@ def get_vm_ip(vmname):
         result = subprocess.run(
             "virsh net-dhcp-leases default",
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
+            check=False,
         )
         if result.returncode == 0:
             for line in result.stdout.splitlines():

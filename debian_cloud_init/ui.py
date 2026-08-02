@@ -54,6 +54,6 @@ def run_cmd(cmd):
         venv_bin = venv + "/bin"
         env["PATH"] = ":".join(p for p in env["PATH"].split(":") if p != venv_bin)
         env.pop("VIRTUAL_ENV", None)
-    result = subprocess.run(cmd, shell=True, env=env)
+    result = subprocess.run(cmd, shell=True, env=env, check=False)
     if result.returncode != 0:
         fail("Fehler beim Ausführen des Befehls.")

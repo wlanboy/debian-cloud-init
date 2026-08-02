@@ -103,7 +103,7 @@ def _create_session(sessions: dict) -> tuple[dict, bool]:
             ["mkpasswd", "-m", "sha-512", password],
             capture_output=True, text=True, check=True
         ).stdout.strip()
-    except Exception:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         fail("mkpasswd fehlt. Installiere: sudo apt install whois")
 
     ssh_dir = pathlib.Path.home() / ".ssh"
@@ -124,7 +124,7 @@ def _create_session(sessions: dict) -> tuple[dict, bool]:
     bridge_interface = None
 
     if ask_yes_no("Soll das Netzwerk auf 'Bridge' gesetzt werden? (Nein = Default NAT)", default=False):
-        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True)
+        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True, check=False)
         interfaces = []
         for line in result.stdout.splitlines():
             parts = line.split(": ")

@@ -98,7 +98,7 @@ def _oneline_wizard():
 
     ans = input("\nBridge-Netzwerk verwenden? (Nein = Default NAT) [j/N]: ").strip().lower()
     if ans in ("j", "y", "ja", "yes"):
-        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True)
+        result = subprocess.run(["ip", "-o", "link", "show"], capture_output=True, text=True, check=False)
         interfaces = []
         for line in result.stdout.splitlines():
             parts = line.split(": ")
@@ -229,7 +229,7 @@ def main():
 
     try:
         cloud_config = yaml.safe_load(template_file.read_text()) or {}
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         fail(f"Fehler beim Laden des Templates: {e}")
 
     cloud_config["users"] = [
@@ -253,7 +253,7 @@ def main():
     try:
         yaml_body = yaml.dump(cloud_config, sort_keys=False, Dumper=yaml.SafeDumper)
         output_file.write_text("#cloud-config\n" + yaml_body)
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         fail(f"Fehler beim Schreiben der cloud-init.yml: {e}")
 
     progress("Validiere YAML…")
@@ -264,21 +264,22 @@ def main():
     if is_persistent:
         print(f"Session geladen: {vmname} ({distro}, {arch})")
         try:
-            state = subprocess.run(["virsh", "domstate", vmname], capture_output=True, text=True).stdout.strip()
-            if state == "running":
-                if ask_yes_no(f"VM '{vmname}' läuft. IP anzeigen?"):
-                    ip = get_vm_ip(vmname)
-                    if ip:
-                        print_ssh_command(username, ip)
-                        return
+            state = subprocess.run(
+                ["virsh", "domstate", vmname], capture_output=True, text=True, check=False
+            ).stdout.strip()
+            if state == "running" and ask_yes_no(f"VM '{vmname}' läuft. IP anzeigen?"):
+                ip = get_vm_ip(vmname)
+                if ip:
+                    print_ssh_command(username, ip)
+                    return
 
             if ask_yes_no(f"Soll die VM '{vmname}' gelöscht und neu erstellt werden?"):
                 delete_vm(vmname, skip_confirm=True)
                 delete_session(vmname)
             else:
                 return
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 - Best-Effort: bei jedem Fehler mit normalem Setup fortfahren
+            print(f"⚠ VM-Status konnte nicht geprüft werden, fahre mit Setup fort: {e}")
 
     print("\n=== VM-Setup ===")
 

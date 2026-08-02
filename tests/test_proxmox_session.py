@@ -1,11 +1,12 @@
 """Unit-Tests für proxmox_session.py"""
 
 import json
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import debian_cloud_init.proxmox_session as proxmox_session
+from debian_cloud_init import proxmox_session
 from debian_cloud_init.proxmox_session import delete_session, get_or_create_session
 
 
@@ -163,7 +164,7 @@ class TestGetOrCreateSessionNew:
     # 1. proxmox_host, 2. ssh_user, 3. node, 4. vmid,
     # 5. storage, 6. snippets_path, 7. bridge,
     # 8. distro_choice, 9. arch_choice, 10. vmname, 11. username
-    _DEFAULTS = ["192.168.1.100", "", "", "100", "", "", "", "", "", "", ""]
+    _DEFAULTS: ClassVar[list[str]] = ["192.168.1.100", "", "", "100", "", "", "", "", "", "", ""]
 
     def test_defaults_produce_debian13_amd64(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -257,9 +258,9 @@ class TestGetOrCreateSessionNew:
              patch("builtins.input", side_effect=inputs), \
              patch("getpass.getpass", return_value="secret"), \
              patch("subprocess.run", return_value=_mkpasswd_mock()), \
-             patch("pathlib.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
     def test_invalid_vmid_exits(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -269,9 +270,9 @@ class TestGetOrCreateSessionNew:
              patch("builtins.input", side_effect=inputs), \
              patch("getpass.getpass", return_value="secret"), \
              patch("subprocess.run", return_value=_mkpasswd_mock()), \
-             patch("pathlib.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
     def test_no_ssh_keys_exits(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -280,9 +281,9 @@ class TestGetOrCreateSessionNew:
              patch("builtins.input", side_effect=list(self._DEFAULTS)), \
              patch("getpass.getpass", return_value="secret"), \
              patch("subprocess.run", return_value=_mkpasswd_mock()), \
-             patch("pathlib.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
     def test_mkpasswd_fails_exits(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -290,10 +291,10 @@ class TestGetOrCreateSessionNew:
         with patch.object(proxmox_session, "SESSION_FILE", session_file), \
              patch("builtins.input", side_effect=list(self._DEFAULTS)), \
              patch("getpass.getpass", return_value="secret"), \
-             patch("subprocess.run", side_effect=Exception("mkpasswd not found")), \
-             patch("pathlib.Path.home", return_value=tmp_path):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("subprocess.run", side_effect=FileNotFoundError("mkpasswd not found")), \
+             patch("pathlib.Path.home", return_value=tmp_path), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
     def test_duplicate_vmname_exits(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -304,9 +305,9 @@ class TestGetOrCreateSessionNew:
              patch("getpass.getpass", return_value="secret"), \
              patch("subprocess.run", return_value=_mkpasswd_mock()), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("builtins.input", side_effect=["n"] + list(self._DEFAULTS)):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("builtins.input", side_effect=["n"] + list(self._DEFAULTS)), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
 
 # =============================================================================
@@ -318,7 +319,7 @@ class TestImportSession:
     # _import_session input order:
     # 1. proxmox_host, 2. ssh_user, 3. node, 4. storage, 5. snippets_path,
     # 6. bridge, 7. vmid, 8. vmname, 9. username, 10. distro_choice, 11. arch
-    _DEFAULTS = ["192.168.1.100", "", "", "", "", "", "200", "imported-vm", "", "", ""]
+    _DEFAULTS: ClassVar[list[str]] = ["192.168.1.100", "", "", "", "", "", "200", "imported-vm", "", "", ""]
 
     def test_import_returns_is_persistent_true(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"
@@ -350,18 +351,18 @@ class TestImportSession:
         inputs = ["192.168.1.100", "", "", "", "", "", "200", "", "", "", ""]
         with patch("builtins.input", side_effect=inputs), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                proxmox_session._import_session({})
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            proxmox_session._import_session({})
 
     def test_import_invalid_vmid_exits(self, tmp_path):
         _setup_ssh_key(tmp_path)
         inputs = ["192.168.1.100", "", "", "", "", "", "abc", "myvm", "", "", ""]
         with patch("builtins.input", side_effect=inputs), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                proxmox_session._import_session({})
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            proxmox_session._import_session({})
 
     def test_import_duplicate_vmname_exits(self, tmp_path):
         _setup_ssh_key(tmp_path)
@@ -369,27 +370,27 @@ class TestImportSession:
         inputs = ["192.168.1.100", "", "", "", "", "", "200", "imported-vm", "", "", ""]
         with patch("builtins.input", side_effect=inputs), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                proxmox_session._import_session(existing)
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            proxmox_session._import_session(existing)
 
     def test_import_empty_host_exits(self, tmp_path):
         _setup_ssh_key(tmp_path)
         inputs = ["", "", "", "", "", "", "200", "myvm", "", "", ""]
         with patch("builtins.input", side_effect=inputs), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                proxmox_session._import_session({})
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            proxmox_session._import_session({})
 
     def test_import_no_ssh_keys_exits(self, tmp_path):
         (tmp_path / ".ssh").mkdir()
         inputs = list(self._DEFAULTS)
         with patch("builtins.input", side_effect=inputs), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                proxmox_session._import_session({})
+             patch("debian_cloud_init.proxmox_session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            proxmox_session._import_session({})
 
     def test_import_saved_to_file(self, tmp_path):
         session_file = tmp_path / ".proxmox-session"

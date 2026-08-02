@@ -6,7 +6,6 @@ import pytest
 
 from debian_cloud_init.ui import ask_int, ask_yes_no, fail, run_cmd
 
-
 # =============================================================================
 # fail
 # =============================================================================
@@ -126,11 +125,11 @@ class TestRunCmd:
             run_cmd("echo test")
 
     def test_failure_exits(self):
-        with patch("subprocess.run", return_value=MagicMock(returncode=1)):
-            with pytest.raises(SystemExit):
-                run_cmd("false")
+        with patch("subprocess.run", return_value=MagicMock(returncode=1)), \
+             pytest.raises(SystemExit):
+            run_cmd("false")
 
     def test_nonzero_returncode_exits(self):
-        with patch("subprocess.run", return_value=MagicMock(returncode=127)):
-            with pytest.raises(SystemExit):
-                run_cmd("command_not_found")
+        with patch("subprocess.run", return_value=MagicMock(returncode=127)), \
+             pytest.raises(SystemExit):
+            run_cmd("command_not_found")

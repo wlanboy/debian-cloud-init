@@ -172,7 +172,7 @@ def _import_session(sessions: dict) -> tuple[dict, bool]:
                 ["mkpasswd", "-m", "sha-512", password],
                 capture_output=True, text=True, check=True
             ).stdout.strip()
-        except Exception:
+        except (FileNotFoundError, subprocess.CalledProcessError):
             fail("mkpasswd fehlt. Installiere: sudo apt install whois")
 
     session_data = {
@@ -260,7 +260,7 @@ def _create_session(sessions: dict) -> tuple[dict, bool]:
             ["mkpasswd", "-m", "sha-512", password],
             capture_output=True, text=True, check=True
         ).stdout.strip()
-    except Exception:
+    except (FileNotFoundError, subprocess.CalledProcessError):
         fail("mkpasswd fehlt. Installiere: sudo apt install whois")
 
     ssh_dir = pathlib.Path.home() / ".ssh"

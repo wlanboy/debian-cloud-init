@@ -43,7 +43,7 @@ def ensure_file_exists(path: pathlib.Path, download_url: str | None = None) -> b
                 urllib.request.urlretrieve(download_url, path)
                 success("Download abgeschlossen.")
                 return True
-            except Exception as e:
+            except OSError as e:
                 fail(f"Download fehlgeschlagen: {e}")
         else:
             fail("Abbruch.")
@@ -76,7 +76,7 @@ def create_meta_data(vmname: str, isos_path: pathlib.Path):
     try:
         meta_path.write_text(content)
         success(f"meta-data.yml erstellt (Hostname: {vmname}).")
-    except Exception as e:
+    except OSError as e:
         fail(f"Fehler beim Erstellen der meta-data.yml: {e}")
 
 

@@ -7,7 +7,6 @@ import pytest
 
 from debian_cloud_init.session import get_or_create_session, load_session, save_session
 
-
 # =============================================================================
 # load_session
 # =============================================================================
@@ -266,9 +265,9 @@ class TestGetOrCreateSessionNew:
              patch("getpass.getpass", return_value="secret"), \
              patch("subprocess.run", return_value=_mkpasswd_mock()), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("debian_cloud_init.session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
 
     def test_mkpasswd_fails_exits(self, tmp_path):
         session_file = tmp_path / ".session"
@@ -276,8 +275,8 @@ class TestGetOrCreateSessionNew:
         with patch("debian_cloud_init.session.SESSION_FILE", session_file), \
              patch("builtins.input", side_effect=["", "", "", ""]), \
              patch("getpass.getpass", return_value="secret"), \
-             patch("subprocess.run", side_effect=Exception("mkpasswd not found")), \
+             patch("subprocess.run", side_effect=FileNotFoundError("mkpasswd not found")), \
              patch("pathlib.Path.home", return_value=tmp_path), \
-             patch("debian_cloud_init.session.ask_yes_no", return_value=False):
-            with pytest.raises(SystemExit):
-                get_or_create_session()
+             patch("debian_cloud_init.session.ask_yes_no", return_value=False), \
+             pytest.raises(SystemExit):
+            get_or_create_session()
