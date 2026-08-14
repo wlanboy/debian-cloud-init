@@ -3,7 +3,7 @@ import json
 import pathlib
 import subprocess
 
-from .ui import ask_yes_no, fail, progress
+from debian_cloud_init.ui import ask_yes_no, fail, progress
 
 SESSION_FILE = pathlib.Path(".proxmox-session")
 
@@ -29,7 +29,7 @@ def _save_all(sessions: dict):
 
 def _sync_sessions(sessions: dict) -> dict:
     """Prüft für jede Session ob die VM auf Proxmox existiert, entfernt verwaiste Einträge."""
-    from .proxmox import ssh_run  # lokaler Import um zirkuläre Imports zu vermeiden
+    from .vm import ssh_run  # lokaler Import um zirkuläre Imports zu vermeiden
 
     print("\n--- Sessions mit Proxmox abgleichen ---")
 

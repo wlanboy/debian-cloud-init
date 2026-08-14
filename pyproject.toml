@@ -16,10 +16,10 @@ dependencies = [
 
 [project.scripts]
 debian-cloud-init = "debian_cloud_init.generator:main"
-debian-cloud-init-proxmox = "debian_cloud_init.proxmox_generator:main"
+debian-cloud-init-proxmox = "proxmox_cloud_init.generator:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["debian_cloud_init"]
+packages = ["debian_cloud_init", "proxmox_cloud_init"]
 
 [dependency-groups]
 dev = [

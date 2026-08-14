@@ -4,20 +4,21 @@ import pathlib
 
 import yaml
 
-from .cloud_init import (
+from debian_cloud_init.cloud_init import (
     LiteralString,
     ensure_file_exists,
     validate_yaml,
 )
-from .proxmox import (
+from debian_cloud_init.ui import ask_yes_no, fail, progress, success
+
+from .session import delete_session, get_or_create_session
+from .vm import (
     create_vm,
     delete_vm,
     get_vm_ip,
     print_ssh_command,
     ssh_run,
 )
-from .proxmox_session import delete_session, get_or_create_session
-from .ui import ask_yes_no, fail, progress, success
 
 
 def main():

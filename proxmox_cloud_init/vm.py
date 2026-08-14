@@ -5,7 +5,7 @@ import tempfile
 import time
 from typing import Literal, overload
 
-from .ui import ask_int, ask_yes_no, fail, progress, success
+from debian_cloud_init.ui import ask_int, ask_yes_no, fail, progress, success
 
 # =============================================================================
 # SSH / SCP Hilfsfunktionen
