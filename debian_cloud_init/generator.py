@@ -210,10 +210,8 @@ def main():
     # CLOUD-INIT GENERIEREN (immer, unabhängig vom VM-Zustand)
     # -------------------------------------------------------------------------
 
-    ensure_file_exists(
-        tools_file,
-        "https://github.com/wlanboy/vagrantkind/raw/refs/heads/main/amd64-tools.sh",
-    )
+    if not ensure_file_exists(tools_file):
+        fail(f"Pflichtdatei fehlt: {tools_file}")
     if not ensure_file_exists(system_config_file):
         fail(f"Pflichtdatei fehlt: {system_config_file}")
     if not ensure_file_exists(package_config_file):

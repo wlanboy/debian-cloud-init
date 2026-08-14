@@ -152,7 +152,7 @@ The `templates/` directory contains files that are merged into the generated `cl
 - `cloud-init-template.yml` – base template (users and runcmd are overwritten by the generator)
 - `package-config.txt` – list of runcmd lines to execute (one per line)
 - `system-config.txt` – shell script injected as a runcmd block
-- `amd64-tools.sh` – additional tooling script (downloaded automatically if missing)
+- `amd64-tools.sh` – additional tooling script
 
 ---
 

@@ -1,9 +1,9 @@
 # Templates
 
-Dieser Ordner enthält die Bausteine, aus denen `generator.py` (lokales KVM/libvirt)
-und `proxmox_generator.py` (Proxmox) zur Laufzeit die finale `cloud-init.yml`
-zusammensetzen. Keine dieser Dateien wird direkt verwendet – sie werden geladen,
-kombiniert und als neues YAML geschrieben.
+Dieser Ordner enthält die Bausteine, aus denen `debian_cloud_init/generator.py`
+(lokales KVM/libvirt) und `proxmox_cloud_init/generator.py` (Proxmox) zur Laufzeit
+die finale `cloud-init.yml` zusammensetzen. Keine dieser Dateien wird direkt
+verwendet – sie werden geladen, kombiniert und als neues YAML geschrieben.
 
 ## cloud-init-template.yml
 Basis-Skelett der Cloud-Init-Konfiguration (`#cloud-config`). Enthält nur leere
@@ -29,15 +29,15 @@ IP-Forwarding, deaktiviert Swap dauerhaft, stellt `iptables`/`ip6tables` auf
 Legacy-Modus um und aktiviert den `qemu-guest-agent`-Dienst.
 
 ## amd64-tools.sh
-Optionales Zusatzskript, ebenfalls als Block in `runcmd` eingebettet. Installiert
+Zusatzskript, ebenfalls als Block in `runcmd` eingebettet. Installiert
 gängige Kubernetes-/DevOps-Tools für `amd64`: `kubectl`, `helm`, `kind`, `istioctl`,
 `k9s`, `argocd` und den Lasttest-Client `hey`. Versionsnummern stehen als
 Variablen am Anfang des Skripts.
 
-Falls die Datei lokal fehlt, wird sie automatisch von
-`https://github.com/wlanboy/vagrantkind/raw/refs/heads/main/amd64-tools.sh`
-heruntergeladen (siehe `ensure_file_exists()` in `generator.py` /
-`proxmox_generator.py`).
+Liegt fest im Repo unter `templates/amd64-tools.sh` und wird wie
+`system-config.txt` und `package-config.txt` als Pflichtdatei behandelt
+(siehe `ensure_file_exists()` in `debian_cloud_init/generator.py` /
+`proxmox_cloud_init/generator.py`) – kein automatischer Download mehr.
 
 ## Ablauf beim Zusammenbau
 1. `cloud-init-template.yml` wird geparst.

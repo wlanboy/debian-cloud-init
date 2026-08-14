@@ -4,15 +4,13 @@ chmod +x ./kubectl
 sudo cp ./kubectl /usr/local/bin
 
 # see https://github.com/helm/helm/releases
-HELM_VERSION="3.19.2"
+HELM_VERSION="4.2.2"
 # see https://github.com/kubernetes-sigs/kind/releases/
-KIND_VERSION="0.30.0"
+KIND_VERSION="0.32.0"
 # see https://github.com/istio/istio/releases/
-ISTIO_VERSION="1.28.2"
+ISTIO_VERSION="1.30.2"
 # see https://github.com/derailed/k9s/releases
-K9S_VERSION="0.50.16"
-ARGOCD_VERSION="v3.2.2"
-#see https://github.com/argoproj/argo-cd/releases
+K9S_VERSION="0.51.0"
 
 cd ~
 wget "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
@@ -36,11 +34,3 @@ wget "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/k9s_Linu
 tar -zxvf k9s_Linux_amd64.tar.gz
 sudo install -m 555 k9s /usr/local/bin/k9s
 rm k9s_Linux_amd64.tar.gz
-
-curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64
-sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
-rm argocd-linux-amd64
-
-wget https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64
-sudo install -m 555 hey_linux_amd64 /usr/local/bin/hey
-rm hey_linux_amd64
