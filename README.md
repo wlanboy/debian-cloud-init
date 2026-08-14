@@ -17,6 +17,17 @@ A key component is the Python-based TUI, which guides you step-by-step through:
 
 This makes cloud-init–based VM provisioning accessible even for users without prior experience.
 
+## project structure
+The project ships two independent packages, one per backend:
+
+```
+debian_cloud_init/     # local KVM/libvirt backend + shared helpers (ui, cloud_init, session)
+proxmox_cloud_init/    # remote Proxmox backend (vm, session, generator)
+templates/              # cloud-init templates shared by both backends
+```
+
+Both are installed together and expose their own console script (`debian-cloud-init` and `debian-cloud-init-proxmox`, see below).
+
 ## screen recordings of tool
 ![Create VM](./vm_setup.gif)
 ![Recreate VM](./vm_setup_rebuild.gif)
