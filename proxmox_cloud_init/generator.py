@@ -13,6 +13,7 @@ from debian_cloud_init.ui import ask_yes_no, fail, progress, success
 
 from .session import delete_session, get_or_create_session
 from .vm import (
+    ProxmoxTarget,
     create_vm,
     delete_vm,
     get_vm_ip,
@@ -35,9 +36,11 @@ def main():
     # -------------------------------------------------------------------------
     session, is_persistent = get_or_create_session()
 
-    host = session["proxmox_host"]
-    ssh_user = session["proxmox_ssh_user"]
-    node = session["proxmox_node"]
+    target = ProxmoxTarget(
+        host=session["proxmox_host"],
+        user=session["proxmox_ssh_user"],
+        node=session["proxmox_node"],
+    )
     vmid = session["proxmox_vmid"]
     storage = session["proxmox_storage"]
     snippets_path = session["proxmox_snippets_path"]
@@ -109,16 +112,16 @@ def main():
     success("cloud-init.yml erfolgreich erstellt.")
 
     if is_persistent:
-        print(f"Session geladen: {vmname} (ID {vmid}) auf {host} ({distro}, {arch})")
-        result = ssh_run(host, ssh_user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
+        print(f"Session geladen: {vmname} (ID {vmid}) auf {target.host} ({distro}, {arch})")
+        result = ssh_run(target.host, target.user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
         if "running" in result.stdout and ask_yes_no(f"VM {vmid} läuft. IP anzeigen?"):
-            ip = get_vm_ip(host, ssh_user, node, vmid)
+            ip = get_vm_ip(target, vmid)
             if ip:
                 print_ssh_command(username, ip)
             return
 
         if ask_yes_no(f"Soll VM {vmid} ({vmname}) gelöscht und neu erstellt werden?"):
-            delete_vm(host, ssh_user, vmid, vmname, skip_confirm=True)
+            delete_vm(target, vmid, vmname, skip_confirm=True)
             delete_session(vmname)
         else:
             return
@@ -127,12 +130,10 @@ def main():
     # VM AUF PROXMOX ANLEGEN
     # -------------------------------------------------------------------------
 
-    print(f"\n=== Proxmox VM-Setup ({host}, Node: {node}) ===")
+    print(f"\n=== Proxmox VM-Setup ({target.host}, Node: {target.node}) ===")
 
     create_vm(
-        host=host,
-        user=ssh_user,
-        node=node,
+        target=target,
         vmid=vmid,
         vmname=vmname,
         arch=arch,

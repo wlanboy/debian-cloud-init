@@ -5,12 +5,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from proxmox_cloud_init.vm import (
+    ProxmoxTarget,
     _extract_ip_from_interfaces,
     create_vm,
     delete_vm,
     ensure_base_image,
     upload_snippets,
 )
+
+TARGET = ProxmoxTarget(host="host", user="root", node="pve")
 
 # =============================================================================
 # _extract_ip_from_interfaces
@@ -79,18 +82,18 @@ def _ssh_result(returncode=0, stdout=""):
 class TestDeleteVm:
     def test_vm_not_found_returns_silently(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=1)):
-            delete_vm("host", "root", 100, "testvm")
+            delete_vm(TARGET, 100, "testvm")
 
     def test_vm_exists_skip_confirm_calls_destroy(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result()) as mock_ssh:
-            delete_vm("host", "root", 100, "testvm", skip_confirm=True)
+            delete_vm(TARGET, 100, "testvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "destroy" in calls
 
     def test_vm_exists_user_confirms_calls_stop_then_destroy(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result()) as mock_ssh, \
              patch("proxmox_cloud_init.vm.ask_yes_no", return_value=True):
-            delete_vm("host", "root", 100, "testvm")
+            delete_vm(TARGET, 100, "testvm")
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "stop" in calls
         assert "destroy" in calls
@@ -99,11 +102,11 @@ class TestDeleteVm:
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result()), \
              patch("proxmox_cloud_init.vm.ask_yes_no", return_value=False), \
              pytest.raises(SystemExit):
-            delete_vm("host", "root", 100, "testvm")
+            delete_vm(TARGET, 100, "testvm")
 
     def test_vmid_included_in_destroy_call(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result()) as mock_ssh:
-            delete_vm("host", "root", 999, "testvm", skip_confirm=True)
+            delete_vm(TARGET, 999, "testvm", skip_confirm=True)
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "999" in calls
 
@@ -116,12 +119,12 @@ class TestDeleteVm:
 class TestEnsureBaseImage:
     def test_image_exists_returns_path_with_filename(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=0)):
-            path = ensure_base_image("host", "root", "amd64", "debian/13")
+            path = ensure_base_image(TARGET, "amd64", "debian/13")
         assert "debian-13-generic-amd64.qcow2" in path
 
     def test_image_exists_no_download_attempted(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=0)) as mock_ssh:
-            ensure_base_image("host", "root", "amd64", "debian/13")
+            ensure_base_image(TARGET, "amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "wget" not in calls
 
@@ -131,7 +134,7 @@ class TestEnsureBaseImage:
             _ssh_result(),
         ]) as mock_ssh, \
              patch("proxmox_cloud_init.vm.ask_yes_no", return_value=True):
-            ensure_base_image("host", "root", "amd64", "debian/13")
+            ensure_base_image(TARGET, "amd64", "debian/13")
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "wget" in calls
 
@@ -139,16 +142,16 @@ class TestEnsureBaseImage:
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=1)), \
              patch("proxmox_cloud_init.vm.ask_yes_no", return_value=False), \
              pytest.raises(SystemExit):
-            ensure_base_image("host", "root", "amd64", "debian/13")
+            ensure_base_image(TARGET, "amd64", "debian/13")
 
     def test_ubuntu_image_name_in_returned_path(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=0)):
-            path = ensure_base_image("host", "root", "amd64", "ubuntu/24.04")
+            path = ensure_base_image(TARGET, "amd64", "ubuntu/24.04")
         assert "ubuntu-24.04-server-cloudimg-amd64.img" in path
 
     def test_arm64_image_name_in_returned_path(self):
         with patch("proxmox_cloud_init.vm.ssh_run", return_value=_ssh_result(returncode=0)):
-            path = ensure_base_image("host", "root", "arm64", "debian/13")
+            path = ensure_base_image(TARGET, "arm64", "debian/13")
         assert "arm64" in path
 
 
@@ -163,7 +166,7 @@ class TestUploadSnippets:
         cloud_init_yml.write_text("#cloud-config\n{}")
         with patch("proxmox_cloud_init.vm.ssh_run"), \
              patch("proxmox_cloud_init.vm.scp_to") as mock_scp:
-            upload_snippets("host", "root", "/var/lib/vz/snippets", "testvm", cloud_init_yml)
+            upload_snippets(TARGET, "/var/lib/vz/snippets", "testvm", cloud_init_yml)
         assert mock_scp.call_count == 3
 
     def test_user_data_source_is_cloud_init_yml(self, tmp_path):
@@ -171,7 +174,7 @@ class TestUploadSnippets:
         cloud_init_yml.write_text("#cloud-config\n{}")
         with patch("proxmox_cloud_init.vm.ssh_run"), \
              patch("proxmox_cloud_init.vm.scp_to") as mock_scp:
-            upload_snippets("host", "root", "/var/lib/vz/snippets", "testvm", cloud_init_yml)
+            upload_snippets(TARGET, "/var/lib/vz/snippets", "testvm", cloud_init_yml)
         first_src = mock_scp.call_args_list[0].args[2]
         assert first_src == cloud_init_yml
 
@@ -180,7 +183,7 @@ class TestUploadSnippets:
         cloud_init_yml.write_text("#cloud-config\n{}")
         with patch("proxmox_cloud_init.vm.ssh_run"), \
              patch("proxmox_cloud_init.vm.scp_to") as mock_scp:
-            upload_snippets("host", "root", "/var/lib/vz/snippets", "myvm", cloud_init_yml)
+            upload_snippets(TARGET, "/var/lib/vz/snippets", "myvm", cloud_init_yml)
         destinations = [str(c.args[3]) for c in mock_scp.call_args_list]
         assert any("myvm-user-data.yml" in d for d in destinations)
         assert any("myvm-meta-data.yml" in d for d in destinations)
@@ -191,7 +194,7 @@ class TestUploadSnippets:
         cloud_init_yml.write_text("#cloud-config\n{}")
         with patch("proxmox_cloud_init.vm.ssh_run") as mock_ssh, \
              patch("proxmox_cloud_init.vm.scp_to"):
-            upload_snippets("host", "root", "/var/lib/vz/snippets", "testvm", cloud_init_yml)
+            upload_snippets(TARGET, "/var/lib/vz/snippets", "testvm", cloud_init_yml)
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "mkdir" in calls
 
@@ -224,7 +227,7 @@ def _create_vm_call(tmp_path, ask_yes_no_side_effect, ask_int_side_effect=None):
          patch("proxmox_cloud_init.vm.ask_yes_no", side_effect=ask_yes_no_side_effect), \
          patch("proxmox_cloud_init.vm.ssh_run", side_effect=_ssh_config_side_effect) as mock_ssh, \
          int_patch:
-        create_vm("host", "root", "pve", 100, "testvm", "amd64", "debian/13",
+        create_vm(TARGET, 100, "testvm", "amd64", "debian/13",
                   "local-lvm", "vmbr0", "/var/lib/vz/snippets", cloud_init_yml)
     return mock_ssh
 
@@ -237,7 +240,7 @@ class TestCreateVm:
              patch("proxmox_cloud_init.vm.ensure_base_image", return_value="/images/debian.qcow2"), \
              patch("proxmox_cloud_init.vm.ask_yes_no", return_value=False), \
              patch("proxmox_cloud_init.vm.ssh_run") as mock_ssh:
-            create_vm("host", "root", "pve", 100, "testvm", "amd64", "debian/13",
+            create_vm(TARGET, 100, "testvm", "amd64", "debian/13",
                       "local-lvm", "vmbr0", "/var/lib/vz/snippets", cloud_init_yml)
         calls = " ".join(str(c) for c in mock_ssh.call_args_list)
         assert "qm create" not in calls
