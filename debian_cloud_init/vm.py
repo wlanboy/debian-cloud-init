@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import time
 
+from .distro import Distro
+from .qemu import machine_type
 from .ui import ask_yes_no, fail, progress, run_cmd, success
 
 ISOS_PATH = pathlib.Path(os.environ.get("ISOS_PATH", "/isos"))
@@ -44,27 +46,8 @@ def ensure_isos_folder():
 # Images
 # =============================================================================
 
-def _os_variant(distro: str) -> str:
-    name, version = distro.split("/", 1)
-    if name == "ubuntu":
-        return f"ubuntu{version}"
-    return f"debian{version}"
-
-
-def _image_info(distro: str, arch: str) -> tuple[str, str]:
-    name, version = distro.split("/", 1)
-    if name == "ubuntu":
-        image_name = f"ubuntu-{version}-server-cloudimg-{arch}.img"
-        url = f"https://cloud-images.ubuntu.com/releases/{version}/release/{image_name}"
-    else:
-        codename = "trixie" if version == "13" else "bookworm"
-        image_name = f"debian-{version}-generic-{arch}.qcow2"
-        url = f"https://cdimage.debian.org/cdimage/cloud/{codename}/latest/{image_name}"
-    return image_name, url
-
-
 def ensure_base_image(arch="amd64", distro="debian/13"):
-    image_name, url = _image_info(distro, arch)
+    image_name, url = Distro.parse(distro).image_info(arch)
     base_img = ISOS_PATH / image_name
 
     if base_img.exists():
@@ -82,7 +65,7 @@ def ensure_base_image(arch="amd64", distro="debian/13"):
 
 def ensure_overlay_image(vmname, arch, distro="debian/13"):
     overlay = ISOS_PATH / f"{vmname}.qcow2"
-    base_image_name, _ = _image_info(distro, arch)
+    base_image_name, _ = Distro.parse(distro).image_info(arch)
     base_image_path = ISOS_PATH / base_image_name
 
     if overlay.exists():
@@ -197,16 +180,16 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
 
     if arch == "arm64":
         virt_type = "qemu"
-        machine = "virt"
         cpu_model = "max"
         arch_binary = "aarch64"
     else:
         virt_type = "kvm"
-        machine = "q35"
         cpu_model = "host-passthrough"
         arch_binary = "x86_64"
+    machine = machine_type(arch)
 
-    if distro.startswith("ubuntu"):
+    distro_obj = Distro.parse(distro)
+    if distro_obj.is_ubuntu:
         seed_iso = create_seed_iso(vmname, network_config_file)
         cloud_init_param = f"--disk {seed_iso},device=cdrom,bus=scsi "
     else:
@@ -224,7 +207,7 @@ def create_vm(vmname, username, arch, net_type="default", bridge_interface=None,
         "--memory 4096 "
         "--vcpus 2 "
         f"--disk {ISOS_PATH / f'{vmname}.qcow2'},device=disk,bus=virtio "
-        f"--os-variant {_os_variant(distro)} "
+        f"--os-variant {distro_obj.os_variant} "
         f"--virt-type {virt_type} "
         "--graphics none "
         "--console pty,target_type=serial "

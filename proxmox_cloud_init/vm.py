@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import pathlib
 import subprocess
@@ -5,6 +6,8 @@ import tempfile
 import time
 from typing import Literal, overload
 
+from debian_cloud_init.distro import Distro
+from debian_cloud_init.qemu import machine_type
 from debian_cloud_init.ui import ask_int, ask_yes_no, fail, progress, success
 
 # =============================================================================
@@ -12,6 +15,16 @@ from debian_cloud_init.ui import ask_int, ask_yes_no, fail, progress, success
 # =============================================================================
 
 _SSH_OPTS = ["-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes"]
+
+
+@dataclasses.dataclass(frozen=True)
+class ProxmoxTarget:
+    """Bündelt Host/User/Node, die vorher als drei einzelne Parameter durch
+    fast jede Funktion in diesem Modul gereicht wurden."""
+
+    host: str
+    user: str
+    node: str
 
 
 @overload
@@ -46,25 +59,13 @@ def scp_to(host: str, user: str, local_path: pathlib.Path, remote_path: str):
 _IMAGE_REMOTE_DIR = "/var/lib/vz/template/iso"
 
 
-def _image_info(distro: str, arch: str) -> tuple[str, str]:
-    name, version = distro.split("/", 1)
-    if name == "ubuntu":
-        image_name = f"ubuntu-{version}-server-cloudimg-{arch}.img"
-        url = f"https://cloud-images.ubuntu.com/releases/{version}/release/{image_name}"
-    else:
-        codename = "trixie" if version == "13" else "bookworm"
-        image_name = f"debian-{version}-generic-{arch}.qcow2"
-        url = f"https://cdimage.debian.org/cdimage/cloud/{codename}/latest/{image_name}"
-    return image_name, url
-
-
-def ensure_base_image(host: str, user: str, arch: str, distro: str) -> str:
+def ensure_base_image(target: ProxmoxTarget, arch: str, distro: str) -> str:
     """Stellt sicher, dass das Cloud-Image auf dem Proxmox-Host existiert.
     Gibt den Remote-Pfad zurück."""
-    image_name, url = _image_info(distro, arch)
+    image_name, url = Distro.parse(distro).image_info(arch)
     remote_path = f"{_IMAGE_REMOTE_DIR}/{image_name}"
 
-    result = ssh_run(host, user, f"test -f {remote_path}", check=False, capture=True)
+    result = ssh_run(target.host, target.user, f"test -f {remote_path}", check=False, capture=True)
     if result.returncode == 0:
         success(f"Basis-Image auf Proxmox vorhanden: {image_name}")
         return remote_path
@@ -73,7 +74,7 @@ def ensure_base_image(host: str, user: str, arch: str, distro: str) -> str:
     distro_label = distro.replace("/", " ").capitalize()
     if ask_yes_no(f"Soll das {distro_label} {arch} Cloud-Image direkt auf Proxmox heruntergeladen werden?"):
         progress(f"Lade {image_name} auf Proxmox herunter…")
-        ssh_run(host, user, f"wget -q --show-progress -O {remote_path} {url}")
+        ssh_run(target.host, target.user, f"wget -q --show-progress -O {remote_path} {url}")
         success(f"Basis-Image heruntergeladen: {image_name}")
         return remote_path
     else:
@@ -84,7 +85,7 @@ def ensure_base_image(host: str, user: str, arch: str, distro: str) -> str:
 # Cloud-Init Snippets hochladen
 # =============================================================================
 
-def upload_snippets(host: str, user: str, snippets_path: str, vmname: str,
+def upload_snippets(target: ProxmoxTarget, snippets_path: str, vmname: str,
                     cloud_init_yml: pathlib.Path) -> None:
     """Lädt user-data, meta-data und network-config als Snippets auf Proxmox hoch."""
     meta_content = (
@@ -110,9 +111,9 @@ def upload_snippets(host: str, user: str, snippets_path: str, vmname: str,
     tmp_files: list[pathlib.Path] = []
     try:
         progress("Lade cloud-init Snippets auf Proxmox hoch…")
-        ssh_run(host, user, f"mkdir -p {snippets_path}")
+        ssh_run(target.host, target.user, f"mkdir -p {snippets_path}")
 
-        scp_to(host, user, cloud_init_yml, f"{snippets_path}/{vmname}-user-data.yml")
+        scp_to(target.host, target.user, cloud_init_yml, f"{snippets_path}/{vmname}-user-data.yml")
 
         for name, content in [
             (f"{vmname}-meta-data.yml", meta_content),
@@ -122,7 +123,7 @@ def upload_snippets(host: str, user: str, snippets_path: str, vmname: str,
                 f.write(content)
                 tmp = pathlib.Path(f.name)
             tmp_files.append(tmp)
-            scp_to(host, user, tmp, f"{snippets_path}/{name}")
+            scp_to(target.host, target.user, tmp, f"{snippets_path}/{name}")
     finally:
         for tmp in tmp_files:
             tmp.unlink(missing_ok=True)
@@ -134,8 +135,8 @@ def upload_snippets(host: str, user: str, snippets_path: str, vmname: str,
 # VM löschen
 # =============================================================================
 
-def delete_vm(host: str, user: str, vmid: int, vmname: str, skip_confirm: bool = False):
-    result = ssh_run(host, user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
+def delete_vm(target: ProxmoxTarget, vmid: int, vmname: str, skip_confirm: bool = False):
+    result = ssh_run(target.host, target.user, f"qm status {vmid} 2>/dev/null", check=False, capture=True)
     if result.returncode != 0:
         print(f"✔ VM {vmid} existiert nicht.")
         return
@@ -145,10 +146,10 @@ def delete_vm(host: str, user: str, vmid: int, vmname: str, skip_confirm: bool =
         fail("Abbruch.")
 
     progress(f"Stoppe VM {vmid}…")
-    ssh_run(host, user, f"qm stop {vmid} --timeout 30 2>/dev/null || true", check=False)
+    ssh_run(target.host, target.user, f"qm stop {vmid} --timeout 30 2>/dev/null || true", check=False)
 
     progress(f"Lösche VM {vmid}…")
-    ssh_run(host, user, f"qm destroy {vmid} --destroy-unreferenced-disks 1 --purge 1")
+    ssh_run(target.host, target.user, f"qm destroy {vmid} --destroy-unreferenced-disks 1 --purge 1")
     success(f"VM {vmid} ({vmname}) wurde gelöscht.")
 
 
@@ -156,12 +157,12 @@ def delete_vm(host: str, user: str, vmid: int, vmname: str, skip_confirm: bool =
 # VM erstellen
 # =============================================================================
 
-def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
+def create_vm(target: ProxmoxTarget, vmid: int, vmname: str,
               arch: str, distro: str, storage: str, bridge: str,
               snippets_path: str, cloud_init_yml: pathlib.Path):
 
-    upload_snippets(host, user, snippets_path, vmname, cloud_init_yml)
-    base_image_path = ensure_base_image(host, user, arch, distro)
+    upload_snippets(target, snippets_path, vmname, cloud_init_yml)
+    base_image_path = ensure_base_image(target, arch, distro)
 
     if not ask_yes_no("Soll die VM jetzt angelegt werden?"):
         print("VM-Erstellung übersprungen.")
@@ -185,8 +186,8 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
 
     # Basis-VM anlegen
     progress(f"Erstelle VM {vmid} ({vmname})…")
-    machine = "virt" if arch == "arm64" else "q35"
-    ssh_run(host, user,
+    machine = machine_type(arch)
+    ssh_run(target.host, target.user,
         f"qm create {vmid}"
         f" --name {vmname}"
         f" --memory {memory}"
@@ -201,12 +202,12 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
 
     # Cloud-Image als Disk importieren (zeigt Fortschritt direkt)
     progress("Importiere Cloud-Image als Disk…")
-    ssh_run(host, user,
+    ssh_run(target.host, target.user,
         f"qm importdisk {vmid} {base_image_path} {storage} --format qcow2"
     )
 
     # Importierte Disk aus qm config lesen (unused0)
-    cfg = ssh_run(host, user, f"qm config {vmid}", capture=True)
+    cfg = ssh_run(target.host, target.user, f"qm config {vmid}", capture=True)
     disk_ref = None
     for line in cfg.stdout.splitlines():
         if line.startswith("unused0:"):
@@ -217,17 +218,17 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
 
     # Disk als scsi0 anhängen und auf 30G vergrößern
     progress("Konfiguriere Disk…")
-    ssh_run(host, user,
+    ssh_run(target.host, target.user,
         f"qm set {vmid} --scsihw virtio-scsi-pci --scsi0 {disk_ref}"
     )
-    ssh_run(host, user, f"qm resize {vmid} scsi0 {disk_gb}G")
+    ssh_run(target.host, target.user, f"qm resize {vmid} scsi0 {disk_gb}G")
 
     # Cloud-Init Drive hinzufügen
     progress("Füge Cloud-Init Drive hinzu…")
-    ssh_run(host, user, f"qm set {vmid} --ide2 {storage}:cloudinit")
+    ssh_run(target.host, target.user, f"qm set {vmid} --ide2 {storage}:cloudinit")
 
     # Snippets als cicustom setzen (user, meta, network explizit — kein --ipconfig0 nötig)
-    ssh_run(host, user,
+    ssh_run(target.host, target.user,
         f'qm set {vmid} --cicustom '
         f'"user=local:snippets/{vmname}-user-data.yml,'
         f'meta=local:snippets/{vmname}-meta-data.yml,'
@@ -235,11 +236,11 @@ def create_vm(host: str, user: str, node: str, vmid: int, vmname: str,
     )
 
     # Boot-Reihenfolge
-    ssh_run(host, user, f"qm set {vmid} --boot order=scsi0")
+    ssh_run(target.host, target.user, f"qm set {vmid} --boot order=scsi0")
 
     # VM starten
     progress(f"Starte VM {vmid}…")
-    ssh_run(host, user, f"qm start {vmid}")
+    ssh_run(target.host, target.user, f"qm start {vmid}")
     success(f"VM '{vmname}' (ID: {vmid}) wurde angelegt und gestartet.")
 
 
@@ -272,11 +273,11 @@ def _extract_ip_from_interfaces(data) -> str | None:
     return None
 
 
-def get_vm_ip(host: str, user: str, node: str, vmid: int) -> str | None:
+def get_vm_ip(target: ProxmoxTarget, vmid: int) -> str | None:
     progress("Warte auf VM-Start…")
 
     for _ in range(60):
-        result = ssh_run(host, user, f"qm status {vmid}", capture=True, check=False)
+        result = ssh_run(target.host, target.user, f"qm status {vmid}", capture=True, check=False)
         if "running" in result.stdout:
             break
         time.sleep(2)
@@ -288,8 +289,8 @@ def get_vm_ip(host: str, user: str, node: str, vmid: int) -> str | None:
 
     for attempt in range(24):  # 24 × 5 s = 2 Minuten
         result = ssh_run(
-            host, user,
-            f"pvesh get /nodes/{node}/qemu/{vmid}/agent/network-get-interfaces"
+            target.host, target.user,
+            f"pvesh get /nodes/{target.node}/qemu/{vmid}/agent/network-get-interfaces"
             f" --output-format json 2>/dev/null",
             capture=True, check=False,
         )
@@ -314,7 +315,7 @@ def get_vm_ip(host: str, user: str, node: str, vmid: int) -> str | None:
 
     # Fallback: ARP-Tabelle auf dem Proxmox-Host
     progress("Fallback: ARP-Tabelle auf Proxmox prüfen…")
-    result = ssh_run(host, user, "arp -n 2>/dev/null", capture=True, check=False)
+    result = ssh_run(target.host, target.user, "arp -n 2>/dev/null", capture=True, check=False)
     if result.returncode == 0:
         entries = [
             line for line in result.stdout.splitlines()
