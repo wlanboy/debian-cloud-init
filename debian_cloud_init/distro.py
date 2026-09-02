@@ -13,7 +13,7 @@ class Distro:
     version: str
 
     @classmethod
-    def parse(cls, value: str) -> "Distro":
+    def parse(cls, value: str) -> Distro:
         name, version = value.split("/", 1)
         return cls(name, version)
 
